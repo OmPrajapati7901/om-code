@@ -1,0 +1,14 @@
+# LRN-02: dependency, build, runtime-state and secret hygiene
+node_modules/
+target/
+runs/
+.om-code/
+*.tsbuildinfo
+.env*
+
+# LRN-01 raw SSE captures stay untracked; curated fixtures land in tests/ at LRN-07c
+tmp/
+
+
+# macOS noise
+.DS_Store
