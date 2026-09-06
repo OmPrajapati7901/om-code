@@ -169,3 +169,47 @@ The function was requested and accumulated, not executed. No thinking text appea
 runs; reasoning-field preservation has synthetic coverage only. See [endpoint notes](endpoint-notes.md)
 for historical capture provenance. Results establish this endpoint/model observation, not
 universal provider compatibility or a paid reasoning requirement.
+
+## 2026-09-06 amendment — transport reverted from LangChain to hand-rolled fetch+SSE
+
+The AC-7.6/SSE-framing rows above, and the socket-close timings in the previous section, were
+recorded against a commit (`feat/provider-langchain`) that routed inference through
+`@langchain/openai`'s `ChatOpenAICompletions`, with LangChain owning HTTP, SSE parsing, message
+conversion and initial-call retries. That dependency was evaluated and removed; see
+[ADR-024](adr/ADR-024-no-langchain.md) for the reasoning. `packages/providers` now depends on
+`@om-code/protocol` only, and owns its own SSE decoding (`sse.ts`) and retry/backoff
+(`guards.ts`'s `retryDelay`/`sleep`), restored from the pre-LangChain compiled output — the only
+surviving copy, since the original `.ts` sources had been deleted in the swap to LangChain.
+
+The claims above were re-verified independently against the reverted code, not merely assumed to
+still hold:
+
+- `pnpm run check`: green, 252 tests passed, 1 skipped (real-keychain) — down from 257 because
+  five parametrized cases testing an ambient `LANGCHAIN_*`/`LANGSMITH_*` tracing-env-var guard
+  were removed along with the guard itself, which existed only to route around a LangChain bug.
+  Every other test, including the AC-7.6 retry-semantics and SSE-byte-split cases, passes
+  unmodified against the new transport.
+- The 6-scenario shared `ModelProvider` contract (`tests/contract/provider.ts`) is green,
+  confirming the revert is behavior-preserving at the public event boundary regardless of
+  transport.
+- `node tests/manual/transport-close.mjs`: socket closure after caller abort in **5 ms for text**
+  and **0 ms for tools**, matching the LangChain-era 6 ms / 0 ms measurement within noise.
+- One behavioral bug was found and fixed during the revert, not present in the LangChain path:
+  the SSE consumer loop initially treated the `[DONE]` sentinel as a no-op rather than an
+  end-of-stream signal, which only surfaces when the underlying connection stays open past
+  `[DONE]` (a real endpoint closing the connection immediately after masks this in production and
+  in any test built against a fixture that closes at EOF).
+
+Retry semantics are otherwise unchanged in substance: initial-connection 429/5xx and pre-response
+transport failures retry up to `maxRetries` (default 2, so three total attempts) with exponential
+backoff, jitter, and numeric/HTTP-date `Retry-After` support capped at 10 seconds; no retry once
+the stream has started. This is now the adapter's own code rather than delegated to an SDK's
+`maxRetries` option, so the acceptance evidence describes this repository's behavior directly
+rather than a wrapped dependency's.
+
+The live Groq smoke test above was not re-run for this amendment (it spends real credits); the
+hand-rolled transport is the same class of implementation that produced the original 2026-09-05
+endpoint notes this project was built against, and the wire format asserted by
+`packages/providers/tests/provider.test.ts` matches the credential-free Groq fixture captures
+byte-for-byte. Re-running `node --env-file=.env tests/manual/provider-smoke.mjs` against the
+configured endpoint is recommended before relying on this in `om run`.

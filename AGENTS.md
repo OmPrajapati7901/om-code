@@ -33,6 +33,8 @@ There is no `pnpm dev` yet: no long-running development workflow exists until `o
 
 `fs-native-extensions@1.5.0` is the sole early native runtime dependency, confined to storage for nonblocking macOS BSD advisory locks. Its packaged native addon loads without adding a Cargo workspace. Keep its lock inode permanent; never unlink it or replace it during journal repair.
 
+`packages/providers` depends on `@om-code/protocol` only: no LangChain, LangGraph, or other agent/LLM framework at the transport, prompt-assembly, or turn-loop layers. See [ADR-024](docs/adr/ADR-024-no-langchain.md) before adding one back.
+
 Rust is not in this repository yet — the Cargo workspace and `native/om-stub` arrive in M4 (LRN-30), and until then these are the commands that will apply, not commands you can run:
 
 - `cargo build --locked` and `cargo test --locked` — build and test Rust crates.
