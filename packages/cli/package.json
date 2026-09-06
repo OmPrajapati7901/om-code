@@ -1,0 +1,27 @@
+{
+  "name": "@om-code/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "om-code command-line entry point",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "bin": {
+    "om": "./dist/om.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && chmod +x dist/om.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "typescript": "5.9.3",
+    "vitest": "3.2.7"
+  }
+}

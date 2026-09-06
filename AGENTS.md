@@ -15,11 +15,17 @@ TypeScript product modules belong in `packages/`, the small Rust execution bound
 
 ## Build, Test, and Development Commands
 
-No executable workspace is scaffolded yet. Do not claim build or test success until root manifests and runnable checks exist. After foundation work lands, use:
+The pnpm workspace exists as of LRN-03; `packages/cli` is the only package in it. Do not claim a gate passed without running it.
 
-- `pnpm install --frozen-lockfile` — reproduce pinned TypeScript dependencies after the initial lockfile is generated.
-- `pnpm dev` — run the local development workflow.
-- `pnpm -r --if-present run lint`, `typecheck`, `test`, and `build` — run the corresponding package gates; required packages must define these scripts.
+- `pnpm install --frozen-lockfile` — reproduce pinned TypeScript dependencies.
+- `pnpm run check` — the full local gate: lint, typecheck, build, test, in that order.
+- `pnpm run lint` (Biome), and `pnpm -r --if-present run typecheck`, `test`, `build` — the individual gates; required packages must define these scripts.
+- `pnpm add --global ./packages/cli` — put `om` on your PATH. `pnpm link --global` was removed in pnpm 11, and `~/Library/pnpm/bin` must be on PATH first (`pnpm setup`).
+
+There is no `pnpm dev` yet: no long-running development workflow exists until `om run` lands in LRN-11.
+
+Rust is not in this repository yet — the Cargo workspace and `native/om-stub` arrive in M4 (LRN-30), and until then these are the commands that will apply, not commands you can run:
+
 - `cargo build --locked` and `cargo test --locked` — build and test Rust crates.
 - `cargo fmt --check` and `cargo clippy --locked -- -D warnings` — enforce Rust style and linting.
 

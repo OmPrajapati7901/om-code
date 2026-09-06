@@ -6,6 +6,9 @@ runs/
 *.tsbuildinfo
 .env*
 
+# LRN-03: TypeScript build output. `pnpm run build` regenerates it.
+dist/
+
 # LRN-01 raw SSE captures stay untracked; curated fixtures land in tests/ at LRN-07c
 tmp/
 

@@ -1,0 +1,5 @@
+# LRN-03. asdf/mise format. Neither is installed on this machine yet, so this
+# file is declarative: it records the toolchain om-code is verified against.
+# package.json `engines.node` is the enforced floor (>=24).
+nodejs 24.20.0
+pnpm 11.25.0

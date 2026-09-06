@@ -629,12 +629,16 @@ Not ten. Five, in order, each finishable in a sitting.
 | # | Action | Output |
 |---|---|---|
 | 1 | `git init`; add `.gitignore` (`node_modules`, `target`, `runs/`, `.om-code/`); commit the four planning documents as they stand | A repository with history, so the next rewrite is recoverable |
-| 2 | Scaffold the workspace: pnpm workspace, Cargo workspace, `tsconfig.base.json` (strict, ESM, NodeNext), `biome.json`, `.tool-versions` | `pnpm install && cargo build` green on macOS arm64 |
+| 2 | Scaffold the workspace: pnpm workspace, `tsconfig.base.json` (strict, ESM, NodeNext), `biome.json`, `.tool-versions`, and the `om` bin entry | `pnpm install && om --version` green on macOS arm64 |
 | 3 | Add the boundary lint (`dependency-cruiser` + the spawn/fs rule) **with a planted-violation test that fails** | The rule is real before there is anything to violate it |
 | 4 | Write `packages/protocol`: journal envelope, entries, `CapabilityRequest`, stub RPC — plus Rust codegen and the round-trip test | The one contract everything else depends on |
 | 5 | Implement the journal in `packages/storage` with `fsync` commit points and corrupt-tail repair | The append/read/materialize property test passes |
 
-**First commit:** `chore(repo): initialize pnpm and cargo workspaces with pinned toolchains`
+**Cargo moved out of action 2 (LRN-03, 2026-09-05).** ADR-023 defers the Rust stub to M4, so a Cargo
+workspace at scaffold time would be an empty build with nothing to compile. It arrives with
+`native/om-stub` in LRN-30, and backlog AC-3.5 asserts it is absent before then.
+
+**First commit:** `chore(repo): initialize the pnpm workspace with pinned toolchains`
 **First real decision to make yourself:** where the journal's commit points sit. That choice is what
 LR-NFR-002 measures, and it is the first place this design can be wrong in a way tests will catch.
 
