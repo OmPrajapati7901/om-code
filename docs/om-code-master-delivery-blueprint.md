@@ -3,7 +3,7 @@
 **Document type:** the single execution plan for this project
 **Date:** 2026-09-05 · **Version:** 2.0 · **Status:** current
 **Scope authority:** [ADR-023](docs/adr/ADR-023-macos-openai-compatible-learning-scope.md)
-**Companions:** [architecture](coding-agent-harness-final-architecture.md) (how it is built) · [backlog](om-code-agent-execution-backlog.md) (what to do next)
+**Companions:** [architecture](docs/coding-agent-harness-final-architecture.md) (how it is built) · [backlog](docs/om-code-agent-execution-backlog.md) (what to do next)
 **Replaces:** the v1.0 production/research blueprint (102-task backlog and experiments), archived at `docs/architecture/archive/2026-09-05-production-plan/` under ADR-023
 
 ---
@@ -12,8 +12,8 @@
 
 You are one developer building a coding-agent harness on your MacBook to learn how these systems
 actually work. This document says **what** to build and **what "done" means**. The
-[backlog](om-code-agent-execution-backlog.md) says **in what order**. The
-[architecture](coding-agent-harness-final-architecture.md) says **how**, and why each choice was made.
+[backlog](docs/om-code-agent-execution-backlog.md) says **in what order**. The
+[architecture](docs/coding-agent-harness-final-architecture.md) says **how**, and why each choice was made.
 
 Three rules make the plan usable by one person:
 
@@ -235,7 +235,7 @@ if journals you care about exist).
 
 ## 6. Architecture in one page
 
-Full reasoning lives in the [architecture document](coding-agent-harness-final-architecture.md); this
+Full reasoning lives in the [architecture document](docs/coding-agent-harness-final-architecture.md); this
 is the shape you need in your head while working.
 
 ```
@@ -457,7 +457,7 @@ between a tool's effect and its durable result.
 ## 11. Milestones
 
 Five milestones. Each ends with a demonstration you can run from a terminal — if you cannot demo it,
-it is not done. No dates (D-08). The [backlog](om-code-agent-execution-backlog.md) is the authority on
+it is not done. No dates (D-08). The [backlog](docs/om-code-agent-execution-backlog.md) is the authority on
 task order; this section is the authority on what each milestone must prove.
 
 **The honest order of value: M1–M3 give you a working coding agent. M4 makes it safe to trust. M5
@@ -614,7 +614,7 @@ Not "never" — "not now, and here is exactly what would change my mind".
 | [ADR-023](docs/adr/ADR-023-macos-openai-compatible-learning-scope.md) | macOS + OpenAI-compatible first | **The scope authority for this document** |
 
 Architecture decisions ADR-001…ADR-020 from the archived blueprint are *not* re-ratified here. The ones
-still load-bearing are stated as decisions in the [architecture document](coding-agent-harness-final-architecture.md):
+still load-bearing are stated as decisions in the [architecture document](docs/coding-agent-harness-final-architecture.md):
 host decides / stub executes, journal as single authority, capability-based policy, buy the sandbox
 runtime, small tool roster, AI SDK for wire format. The rest — Directors, plugins, `dyn`, app-server,
 speculative compaction, Ink — described things this release does not build; they return with their

@@ -4,9 +4,9 @@
 
 This repository currently contains om-code's planning source of truth:
 
-- `om-code-master-delivery-blueprint.md` — current learning-release requirements and milestones.
-- `coding-agent-harness-final-architecture.md` — current architecture and extension contracts.
-- `om-code-agent-execution-backlog.md` — dependency-ordered `LRN-*` implementation tasks, each with its acceptance criteria, the universal Definition of Done, and the cross-task dependency map. Read a task's criteria before starting it.
+- `docs/om-code-master-delivery-blueprint.md` — current learning-release requirements and milestones.
+- `docs/coding-agent-harness-final-architecture.md` — current architecture and extension contracts.
+- `docs/om-code-agent-execution-backlog.md` — dependency-ordered `LRN-*` implementation tasks, each with its acceptance criteria, the universal Definition of Done, and the cross-task dependency map. Read a task's criteria before starting it.
 - `docs/adr/ADR-023-macos-openai-compatible-learning-scope.md` — current scope decision.
 
 Initial support is macOS on the developer's MacBook, with arm64 as the first verified target. Initial inference uses configurable OpenAI-compatible Chat Completions. Keep other API formats and platforms possible through ports, but do not implement their adapters until scope expands.

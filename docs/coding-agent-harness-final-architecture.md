@@ -876,7 +876,7 @@ Note that macOS-only scope removes one of those three motivations entirely: we h
 
 pnpm workspaces + Turborepo for TypeScript and a Cargo workspace for the stub. One repository, two toolchains, explicit boundaries. (Python and `uv` left with the deferred evaluation programme.)
 
-**This is the full architecture's layout, not the learning release's.** The packages the learning release actually builds are the subset listed in [the blueprint](om-code-master-delivery-blueprint.md) §6: `protocol`, `kernel`, `session`, `storage`, `policy`, `providers`, `context`, `tools`, `stub-client`, `sandbox`, `cli`, plus `native/om-stub`, `native/om-stub-protocol` and `native/om-patch`. Everything else below — `dyn`, `mcp`, `acp`, `app-server`, `hooks`, `plugins`, `telemetry`, `tui`, `sdk`, `replay` — belongs to a deferred feature and gets created with that feature, not before.
+**This is the full architecture's layout, not the learning release's.** The packages the learning release actually builds are the subset listed in [the blueprint](docs/om-code-master-delivery-blueprint.md) §6: `protocol`, `kernel`, `session`, `storage`, `policy`, `providers`, `context`, `tools`, `stub-client`, `sandbox`, `cli`, plus `native/om-stub`, `native/om-stub-protocol` and `native/om-patch`. Everything else below — `dyn`, `mcp`, `acp`, `app-server`, `hooks`, `plugins`, `telemetry`, `tui`, `sdk`, `replay` — belongs to a deferred feature and gets created with that feature, not before.
 
 ```
 om-code/

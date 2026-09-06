@@ -1,22 +1,25 @@
-# Archived Production Plan — 2026-09-05
+# om-code — Learning Release
 
-These three files are unchanged copies of the planning documents immediately
-before the macOS/OpenAI-compatible learning-scope revision:
+A terminal coding agent harness for macOS, built to understand agent-system design from the inside.
 
-- [Architecture study](coding-agent-harness-final-architecture.md)
-- [Delivery blueprint](om-code-master-delivery-blueprint.md)
-- [Execution backlog](om-code-agent-execution-backlog.md)
+## Current plans and requirements
 
-They retain the earlier research, task IDs, completion notes, and proposals.
-They are historical context, not instructions to implement the old scope. Some
-companion documents and issue-tracker items mentioned in their prose are not
-present in this checkout; their existence or completion has not been verified.
+- **[Delivery Blueprint](docs/om-code-master-delivery-blueprint.md)** — what "done" means for each milestone
+- **[Execution Backlog](docs/om-code-agent-execution-backlog.md)** — the 49 tasks in order, with 238 acceptance criteria
+- **[Architecture](docs/coding-agent-harness-final-architecture.md)** — how the system is built and why
 
-Use the [current blueprint](../../../../om-code-master-delivery-blueprint.md),
-[current architecture](../../../../coding-agent-harness-final-architecture.md),
-and [current backlog](../../../../om-code-agent-execution-backlog.md) for execution.
-The scope decision is [ADR-023](../../../adr/ADR-023-macos-openai-compatible-learning-scope.md).
+## Quick orientation
 
-[repository-guidelines.md](docs/architecture/archive/2026-09-05-production-plan/repository-guidelines.md), now archived, is a record of the previous repository guidance — superseded by [AGENTS.md](AGENTS.md).
-Its old task and approval rules are superseded by the current root guidance and
-ADR-023. The archived plan contents are not evidence of successful implementation.
+**Start with** [ADR-023](docs/adr/ADR-023-macos-openai-compatible-learning-scope.md) if you want the scope decision in one place: macOS arm64, CLI only, one OpenAI-compatible endpoint, solo developer, learning not shipping.
+
+**If you're building this**, read the blueprint first (it answers "what" and "why"), then the backlog (it answers "in what order"), then the architecture (it answers "how").
+
+**If you're reviewing**, see [AGENTS.md](AGENTS.md) for the repository guidelines, and the backlog's acceptance criteria for what "done" means on each task.
+
+## Status
+
+Pre-implementation. Planning complete (Sept 5, 2026). No code built yet.
+
+---
+
+The archived v1.0 production plan (102 tasks, research experiments, multi-agent delivery model) lives in [`docs/architecture/archive/2026-09-05-production-plan/`](docs/architecture/archive/2026-09-05-production-plan/) as reference material, not a gate.

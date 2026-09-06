@@ -3,7 +3,7 @@
 - **Status:** Accepted scope; implementation not started
 - **Date:** 2026-09-05
 - **Decision source:** The user's direction: personal learning, MacBook only for now, OpenAI-compatible model format initially, open to extension.
-- **Related:** [current blueprint](../../om-code-master-delivery-blueprint.md), [current architecture](../../coding-agent-harness-final-architecture.md), [current backlog](../../om-code-agent-execution-backlog.md).
+- **Related:** [current blueprint](../om-code-master-delivery-blueprint.md), [current architecture](../coding-agent-harness-final-architecture.md), [current backlog](../om-code-agent-execution-backlog.md).
 
 ## Context
 

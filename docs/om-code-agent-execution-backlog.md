@@ -1,6 +1,6 @@
 # om-code — Execution Backlog (Solo, macOS)
 
-**Source plan:** [om-code-master-delivery-blueprint.md](om-code-master-delivery-blueprint.md) (`LR-FR-*`, `LR-NFR-*`) · [coding-agent-harness-final-architecture.md](coding-agent-harness-final-architecture.md)
+**Source plan:** [om-code-master-delivery-blueprint.md](docs/om-code-master-delivery-blueprint.md) (`LR-FR-*`, `LR-NFR-*`) · [coding-agent-harness-final-architecture.md](docs/coding-agent-harness-final-architecture.md)
 **Scope authority:** [ADR-023](docs/adr/ADR-023-macos-openai-compatible-learning-scope.md) — macOS arm64, one OpenAI-compatible endpoint, one developer
 **Replaces:** the 102-task multi-agent backlog, archived at `docs/architecture/archive/2026-09-05-production-plan/` under ADR-023
 
