@@ -1,4 +1,4 @@
-/** Application privacy/cleanup guards; HTTP parsing and retries belong to LangChain. */
+/** Bounded HTTP helpers. Secrets only reach Authorization, never diagnostics. */
 import { ProviderError } from "@om-code/protocol";
 
 export function sanitize(message: string, secret: string | undefined): string {
@@ -112,4 +112,39 @@ export async function errorMessage(
       }
     }
   return `HTTP ${response.status}: ${sanitize(message || "empty error body", secret)}`;
+}
+
+export function retryDelay(
+  attempt: number,
+  retryAfter: string | null,
+  now: number,
+  random: () => number,
+): number {
+  const exponential = Math.min(10_000, 500 * 2 ** attempt) * Math.max(0, Math.min(1, random()));
+  let requested = 0;
+  if (retryAfter !== null) {
+    const seconds = /^\d+(?:\.\d+)?$/.test(retryAfter.trim()) ? Number(retryAfter) : Number.NaN;
+    requested = Number.isFinite(seconds)
+      ? seconds * 1000
+      : Math.max(0, Date.parse(retryAfter) - now);
+  }
+  return Math.min(10_000, Math.max(exponential, Number.isFinite(requested) ? requested : 0));
+}
+
+export function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new ProviderError("aborted", "request aborted"));
+      return;
+    }
+    const abort = () => {
+      clearTimeout(timer);
+      reject(new ProviderError("aborted", "request aborted"));
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", abort);
+      resolve();
+    }, ms);
+    signal.addEventListener("abort", abort, { once: true });
+  });
 }

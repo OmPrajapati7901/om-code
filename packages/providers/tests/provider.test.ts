@@ -217,7 +217,7 @@ describe("tool calls (AC-7.3)", () => {
 });
 
 describe("retry semantics (AC-7.6)", () => {
-  it("bounds framework retry attempts without nested SDK retries", async () => {
+  it("retries 429/5xx up to maxRetries, then fails with the last status", async () => {
     vi.useFakeTimers();
     const fetchImpl = vi
       .fn<typeof fetch>()
@@ -265,7 +265,7 @@ describe("retry semantics (AC-7.6)", () => {
       expect(fetchImpl).toHaveBeenCalledTimes(1);
     },
   );
-  it("allows framework retries for initial transport failures", async () => {
+  it("retries a transport failure before headers arrive", async () => {
     vi.useFakeTimers();
     const fetchImpl = vi
       .fn<typeof fetch>()
@@ -465,8 +465,8 @@ describe("disconnect/cancellation (AC-7.7, 7.8)", () => {
   });
 });
 
-describe("framework privacy and configuration", () => {
-  it("ignores ambient credentials, endpoints and SDK logging", async () => {
+describe("credential and configuration privacy", () => {
+  it("ignores ambient credentials and endpoint env vars", async () => {
     for (const name of [
       "OPENAI_API_KEY",
       "OPENAI_ADMIN_KEY",
@@ -497,7 +497,7 @@ describe("framework privacy and configuration", () => {
     for (const log of logs) expect(log).not.toHaveBeenCalled();
   });
 
-  it("does not log malformed SSE payloads even when SDK debug logging is enabled", async () => {
+  it("does not log malformed SSE payloads", async () => {
     vi.stubEnv("OPENAI_LOG", "debug");
     const errorLog = vi.spyOn(console, "error");
     const error = await collect(
@@ -506,24 +506,6 @@ describe("framework privacy and configuration", () => {
     expect(error).toMatchObject({ kind: "malformed-stream" });
     expect(String(error)).not.toContain("MALFORMED_PRIVATE_SENTINEL");
     expect(errorLog).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    "LANGCHAIN_VERBOSE",
-    "LANGCHAIN_TRACING",
-    "LANGCHAIN_TRACING_V2",
-    "LANGSMITH_TRACING",
-    "LANGSMITH_TRACING_V2",
-  ])("refuses ambient %s before any network traffic", async (name) => {
-    vi.stubEnv(name, "true");
-    vi.stubEnv("LANGSMITH_API_KEY", "AMBIENT_SENTINEL");
-    const unexpected = vi.spyOn(globalThis, "fetch");
-    const fetchImpl = vi.fn<typeof fetch>();
-    await expect(
-      collect(new OpenAICompatibleProvider({ baseUrl, fetchImpl }).stream(request, signal())),
-    ).rejects.toThrow(`Disable ${name}`);
-    expect(unexpected).not.toHaveBeenCalled();
-    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it("can disable retries and validates the two-retry ceiling", async () => {
@@ -561,7 +543,7 @@ describe("framework privacy and configuration", () => {
   });
 });
 
-describe("SDK framing and initial wait limits", () => {
+describe("SSE framing and initial wait limits", () => {
   it.each(["\n", "\r\n", "\r"])(
     "decodes UTF-8 at every byte boundary with %j framing",
     async (newline) => {

@@ -19,11 +19,7 @@ it.each(["session", "providers"])(
   (name) => {
     const path = resolve(root, "packages", name);
     const manifest = JSON.parse(readFileSync(join(path, "package.json"), "utf8"));
-    expect(Object.keys(manifest.dependencies).sort()).toEqual(
-      name === "providers"
-        ? ["@langchain/core", "@langchain/openai", "@om-code/protocol"]
-        : ["@om-code/protocol"],
-    );
+    expect(Object.keys(manifest.dependencies).sort()).toEqual(["@om-code/protocol"]);
     for (const file of files(join(path, "src"))) {
       const source = readFileSync(file, "utf8");
       expect(source).not.toMatch(

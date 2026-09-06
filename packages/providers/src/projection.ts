@@ -1,5 +1,4 @@
-/** Journal projection of LangChain chunks. Never use its eagerly parsed tool arguments. */
-import { type BaseMessageChunk, isAIMessageChunk } from "@langchain/core/messages";
+/** Payload normalization. Tool arguments stay unparsed, including malformed JSON. */
 import {
   type ModelEvent,
   type ModelResponse,
@@ -10,9 +9,16 @@ import {
   type Usage,
 } from "@om-code/protocol";
 
+export function object(value: unknown): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    throw new ProviderError("malformed-stream", "expected a JSON object in stream");
+  return value as Record<string, unknown>;
+}
+
 function malformed(message: string): never {
   throw new ProviderError("malformed-stream", message);
 }
+
 export function mapUsage(value: unknown): Usage {
   if (typeof value !== "object" || value === null || Array.isArray(value))
     return { kind: "unknown" };
@@ -36,19 +42,30 @@ export class ResponseProjection {
   private stopReason: string | undefined;
   private characters = 0;
 
-  accept(chunk: BaseMessageChunk, model: string): ModelEvent[] {
+  accept(payload: unknown): ModelEvent[] {
+    const raw = object(payload);
+    if (raw.error !== undefined) return malformed("endpoint returned an error in its stream");
     const events: ModelEvent[] = [];
     if (this.id === undefined) {
-      this.id = chunk.id ?? crypto.randomUUID();
-      events.push({ type: "message_start", id: this.id, model });
+      if (typeof raw.id !== "string" || !raw.id || typeof raw.model !== "string")
+        return malformed("missing response identity");
+      this.id = raw.id;
+      events.push({ type: "message_start", id: raw.id, model: raw.model });
+    } else if (raw.id !== undefined && raw.id !== this.id) {
+      return malformed("response identity changed");
     }
-    const reported = chunk.response_metadata.usage;
-    if (reported && typeof reported === "object" && Object.keys(reported).length > 0)
-      this.usage = mapUsage(reported);
-    for (const [text, type] of [
-      [chunk.additional_kwargs.reasoning_content, "thinking"],
-      [chunk.content, "text"],
+    if (raw.usage !== undefined && raw.usage !== null) this.usage = mapUsage(raw.usage);
+    if (!Array.isArray(raw.choices) || raw.choices.length > 1)
+      return malformed("expected at most one completion choice");
+    if (raw.choices.length === 0) return events;
+    const choice = object(raw.choices[0]);
+    if (choice.index !== 0) return malformed("expected completion choice index 0");
+    const delta = object(choice.delta);
+    for (const [field, type] of [
+      ["content", "text"],
+      ["reasoning_content", "thinking"],
     ] as const) {
+      const text = delta[field];
       if (text === undefined || text === null || text === "") continue;
       if (typeof text !== "string" || this.stopReason !== undefined)
         return malformed("invalid content delta");
@@ -60,17 +77,19 @@ export class ResponseProjection {
         type === "text" ? { type: "text_delta", text } : { type: "thinking_delta", text },
       );
     }
-    if (isAIMessageChunk(chunk)) {
-      for (const fragment of chunk.tool_call_chunks ?? []) {
-        if (this.stopReason !== undefined) return malformed("tool delta after finish");
-        events.push(this.tool(fragment));
-      }
+    if (delta.tool_calls !== undefined) {
+      if (!Array.isArray(delta.tool_calls) || this.stopReason !== undefined)
+        return malformed("invalid tool-call delta");
+      for (const fragment of delta.tool_calls) events.push(this.tool(fragment));
     }
-    const finish = chunk.response_metadata.finish_reason;
-    if (finish !== undefined && finish !== null) {
-      if (typeof finish !== "string" || !finish || this.stopReason !== undefined)
+    if (choice.finish_reason !== undefined && choice.finish_reason !== null) {
+      if (
+        typeof choice.finish_reason !== "string" ||
+        choice.finish_reason.length === 0 ||
+        this.stopReason !== undefined
+      )
         return malformed("invalid finish reason");
-      this.stopReason = finish;
+      this.stopReason = choice.finish_reason;
     }
     return events;
   }
@@ -80,37 +99,47 @@ export class ResponseProjection {
     if (this.characters > 8_388_608) malformed("response exceeds character limit");
   }
 
-  private tool(raw: { index?: number; id?: string; name?: string; args?: string }): ModelEvent {
-    if (!Number.isSafeInteger(raw.index) || raw.index === undefined || raw.index < 0)
+  private tool(value: unknown): ModelEvent {
+    const raw = object(value);
+    if (typeof raw.index !== "number" || !Number.isSafeInteger(raw.index) || raw.index < 0)
       return malformed("missing or invalid tool-call index");
-    const call = { ...(this.calls.get(raw.index) ?? { index: raw.index, arguments_raw: "" }) };
+    if (raw.type !== undefined && raw.type !== "function")
+      return malformed("unsupported tool-call type");
+    const fn = raw.function === undefined ? {} : object(raw.function);
+    const previous = this.calls.get(raw.index) ?? { index: raw.index, arguments_raw: "" };
+    const call = { ...previous };
     if (raw.id !== undefined) {
       if (
         typeof raw.id !== "string" ||
         !raw.id ||
-        (call.call_id !== undefined && call.call_id !== raw.id) ||
+        (call.call_id !== undefined && call.call_id !== raw.id)
+      )
+        return malformed("conflicting tool-call id");
+      if (
         [...this.calls.values()].some(
           (other) => other.index !== raw.index && other.call_id === raw.id,
         )
       )
-        return malformed("conflicting tool-call id");
+        return malformed("duplicate tool-call id");
       call.call_id = raw.id;
     }
-    if (
-      (raw.name !== undefined && typeof raw.name !== "string") ||
-      (raw.args !== undefined && typeof raw.args !== "string")
-    )
-      return malformed("invalid tool-call fragment");
-    this.account((raw.name?.length ?? 0) + (raw.args?.length ?? 0));
-    if (raw.name) call.name = (call.name ?? "") + raw.name;
-    call.arguments_raw += raw.args ?? "";
+    if (fn.name !== undefined && typeof fn.name !== "string")
+      return malformed("invalid tool name fragment");
+    if (fn.arguments !== undefined && typeof fn.arguments !== "string")
+      return malformed("invalid tool arguments fragment");
+    if (typeof fn.name === "string" && fn.name.length > 0) call.name = (call.name ?? "") + fn.name;
+    if (typeof fn.arguments === "string") call.arguments_raw += fn.arguments;
+    this.account(
+      (typeof fn.name === "string" ? fn.name.length : 0) +
+        (typeof fn.arguments === "string" ? fn.arguments.length : 0),
+    );
     this.calls.set(call.index, call);
     return {
       type: "tool_call_delta",
       index: call.index,
-      ...(raw.id === undefined ? {} : { call_id: raw.id }),
-      ...(raw.name === undefined ? {} : { name_delta: raw.name }),
-      ...(raw.args === undefined ? {} : { arguments_delta: raw.args }),
+      ...(typeof raw.id === "string" ? { call_id: raw.id } : {}),
+      ...(typeof fn.name === "string" ? { name_delta: fn.name } : {}),
+      ...(typeof fn.arguments === "string" ? { arguments_delta: fn.arguments } : {}),
     };
   }
 
