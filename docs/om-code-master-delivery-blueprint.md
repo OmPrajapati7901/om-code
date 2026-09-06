@@ -339,6 +339,27 @@ and its durable result (D-10). Resume surfaces it; nothing re-runs it.
 `StructuredSummary` (used by compaction): `goal`, `decisions`, `constraints`, `changed_files`,
 `tests`, `failed_attempts`, `approved_permissions`, `open_questions`, `next_steps`.
 
+**Resolved in LRN-05 (`packages/protocol`, every kind at `schemaVersion: 1`).** §7 left
+four types undefined and two more fieldless; the resolutions below are normative for the
+journal from LRN-06 onward. Owning tasks extend and bump the affected kind.
+
+| Type | Resolution |
+|---|---|
+| `Usage` | Tagged union: `{ kind: "known"; input_tokens; output_tokens; total_tokens? } \| { kind: "unknown" }` — "never zero, never estimated" (LRN-07b) is a type error |
+| `ToolStatus` | `ok \| error \| denied \| cancelled \| timeout \| unknown`; `unknown` is the D-10 crash-reconciliation state |
+| `Block[]` | The archived doc's four content blocks: `{ type: "text"; text }`, `{ type: "thinking"; text; signature? }`, `{ type: "tool_use"; call_id; tool; input }`, `{ type: "image"; media_type; blob_ref }`, discriminated on `type`. Images carry a `blob_ref`, never inline base64 |
+| `...ToolCall` | Learning-scope subset: `call_id`, `tool`, `input: unknown`, `capability: CapabilityRequest` (no subagents/jobs in this release) |
+| `FileSnapshot` | `{ path; sha256; blob_ref?; mode? }` — LRN-23 owns checkpoints and extends it |
+| `StructuredSummary` | `goal: string`; the other eight fields are `string[]` |
+| `SessionMeta` | `id, name?, project_root, cwd, created_at, updated_at, status: active\|idle\|ended, mode, model: ModelRef, sandbox_profile?, tags: string[]`. Carries no credential (LR-FR-030); entry strictness makes one a parse failure |
+| `SessionMeta.mode` | The five values `plan \| manual \| accept_edits \| auto \| bypass` (not §8.1's two), so the journal's vocabulary does not change when later modes arrive. This release's CLI maps `--mode read_only` to `plan` and `--mode manual` to `manual` |
+| `ModelRef` | `{ id: string; base_url: string }`, matching LRN-04's resolved settings |
+| `by: tool:` | `"user" \| "model" \| "system"` plus `tool:<name>` (no whitespace) |
+| `network` | Present as `never`: a record requesting network fails loudly naming D-01 |
+
+Field naming: journal (wire) fields are snake_case to mirror the M4 Rust DTOs;
+TypeScript-internal state (LRN-04's config) stays camelCase (see `AGENTS.md`).
+
 ---
 
 ## 8. Contracts
