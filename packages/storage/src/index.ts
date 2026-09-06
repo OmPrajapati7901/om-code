@@ -1,0 +1,44 @@
+/**
+ * Public surface of @om-code/storage (LRN-04).
+ *
+ * Config file schemas stay here, not in packages/protocol: protocol is the
+ * wire authority (AGENTS.md), and a local config file is not a wire contract.
+ */
+
+export { type KeychainRunner, resolveCredentialSecret } from "./config/credential.js";
+export { ConfigError, isConfigError } from "./config/errors.js";
+export {
+  type LoadSettingsOptions,
+  loadSettings,
+  type RuntimeSettings,
+  requireComplete,
+} from "./config/loader.js";
+export {
+  type ConfigPaths,
+  findProjectRoot,
+  resolveConfigPaths,
+  resolveOmHome,
+} from "./config/paths.js";
+export {
+  type FileReader,
+  parseTierDocument,
+  readTierFile,
+  type TierDocument,
+} from "./config/read.js";
+export {
+  type ResolvedEntry,
+  type ResolvedSettings,
+  type ResolveInput,
+  resolveSettings,
+  type Tier,
+} from "./config/resolve.js";
+export {
+  type ConfigFlags,
+  type CredentialReference,
+  CredentialSecret,
+  parseBaseUrl,
+  parseCredentialReference,
+  parseModel,
+  SETTINGS,
+  type SettingKey,
+} from "./config/settings.js";

@@ -13,6 +13,8 @@ Initial support is macOS on the developer's MacBook, with arm64 as the first ver
 
 TypeScript product modules belong in `packages/`, the small Rust execution boundary in `native/`, fixtures and cross-package/escape suites in `tests/`, and architecture/research material in `docs/`. Python tooling and `evals/`/`experiments/` implementation are deferred. The old production plans under `docs/architecture/archive/` and deferred research documents are historical references, not active gates. Update linked active plans together when a decision affects scope or sequencing.
 
+After every change, assess whether it introduces durable context that other agents need to work correctly, such as a new command, convention, architectural boundary, dependency, or scope decision. If it does, update `AGENTS.md` in the same change; do not add routine implementation details or use this file as a change log.
+
 ## Build, Test, and Development Commands
 
 The pnpm workspace exists as of LRN-03; `packages/cli` is the only package in it. Do not claim a gate passed without running it.
@@ -20,6 +22,7 @@ The pnpm workspace exists as of LRN-03; `packages/cli` is the only package in it
 - `pnpm install --frozen-lockfile` — reproduce pinned TypeScript dependencies.
 - `pnpm run check` — the full local gate: lint, typecheck, build, test, in that order.
 - `pnpm run lint` (Biome), and `pnpm -r --if-present run typecheck`, `test`, `build` — the individual gates; required packages must define these scripts.
+- `pretypecheck` builds the workspace first, so a package typechecks against the built declarations of the workspace packages it imports (rather than their sources).
 - `pnpm add --global ./packages/cli` — put `om` on your PATH. `pnpm link --global` was removed in pnpm 11, and `~/Library/pnpm/bin` must be on PATH first (`pnpm setup`).
 
 There is no `pnpm dev` yet: no long-running development workflow exists until `om run` lands in LRN-11.

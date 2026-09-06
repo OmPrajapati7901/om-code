@@ -7,11 +7,14 @@
  * writes are not truncated when output is piped.
  */
 
+import { loadSettings } from "@om-code/storage";
 import { runCli } from "./cli.js";
 
 const result = runCli(process.argv.slice(2), {
-  platform: process.platform,
-  arch: process.arch,
+  host: { platform: process.platform, arch: process.arch },
+  env: process.env,
+  cwd: process.cwd(),
+  loadSettings: (options) => loadSettings(options),
 });
 
 if (result.stdout !== "") {

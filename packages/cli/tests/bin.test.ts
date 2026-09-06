@@ -15,6 +15,7 @@ const requireFromHere = createRequire(import.meta.url);
 const manifest = requireFromHere("../package.json") as { version: string };
 
 const packageRoot = join(import.meta.dirname, "..");
+const repoRoot = join(packageRoot, "..", "..");
 const binary = join(packageRoot, "dist", "om.js");
 
 type Run = { stdout: string; stderr: string; status: number };
@@ -43,8 +44,9 @@ function runBinary(args: readonly string[]): Run {
 
 beforeAll(() => {
   // Build here so the binary under test is always this source, whether the
-  // suite runs alone or after `pnpm run build`.
-  execFileSync("pnpm", ["run", "build"], { cwd: packageRoot, stdio: "pipe" });
+  // suite runs alone or after `pnpm run build`. The workspace build also
+  // produces @om-code/storage's dist, which the CLI imports.
+  execFileSync("pnpm", ["run", "build"], { cwd: repoRoot, stdio: "pipe" });
 }, 120_000);
 
 describe("the om binary", () => {

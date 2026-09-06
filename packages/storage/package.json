@@ -1,26 +1,25 @@
 {
-  "name": "@om-code/cli",
+  "name": "@om-code/storage",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "om-code command-line entry point",
+  "description": "Host-owned application state: config loader, journals, blobs, locks (LRN-04)",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=24"
   },
-  "bin": {
-    "om": "./dist/om.js"
-  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && chmod +x dist/om.js",
+    "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
-    "@om-code/storage": "workspace:*"
+    "zod": "4.5.4"
   },
   "devDependencies": {
     "@types/node": "24.13.3",
