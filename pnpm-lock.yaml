@@ -31,6 +31,25 @@ importers:
         specifier: 3.2.7
         version: 3.2.7(@types/node@24.13.3)
 
+  packages/kernel:
+    dependencies:
+      '@om-code/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@om-code/session':
+        specifier: workspace:*
+        version: link:../session
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 3.2.7
+        version: 3.2.7(@types/node@24.13.3)
+
   packages/protocol:
     dependencies:
       zod:
@@ -109,6 +128,9 @@ importers:
 
   tests:
     devDependencies:
+      '@om-code/kernel':
+        specifier: workspace:*
+        version: link:../packages/kernel
       '@om-code/protocol':
         specifier: workspace:*
         version: link:../packages/protocol

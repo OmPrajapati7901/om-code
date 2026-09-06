@@ -2,6 +2,7 @@
 import { appendFile, mkdir, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { assemblePrompt } from "@om-code/kernel";
 import { type Entry, type ModelResponse, ProviderError } from "@om-code/protocol";
 import { OpenAICompatibleProvider } from "@om-code/providers";
 import { materialize } from "@om-code/session";
@@ -74,6 +75,11 @@ it("AC-6.4 append/read/materialize agrees with an independent generated referenc
       },
       { kind: "repair", schemaVersion: 1, reason: "fixture", truncated_from: 1 },
       { kind: "turn_end", schemaVersion: 1, usage: { kind: "unknown" } },
+      {
+        kind: "prompt",
+        schemaVersion: 1,
+        instructions: [{ path: "AGENTS.md", sha256: "3".repeat(64) }],
+      },
       {
         kind: "assistant_message",
         schemaVersion: 2,
@@ -152,10 +158,52 @@ it("AC-6.4 append/read/materialize agrees with an independent generated referenc
         checkpoints: actions.filter((entry) => entry.kind === "checkpoint"),
         compactions: actions.filter((entry) => entry.kind === "compaction"),
         repairs: actions.filter((entry) => entry.kind === "repair"),
+        prompts: actions.filter((entry) => entry.kind === "prompt"),
       });
     }),
     { numRuns: 50 },
   );
+});
+
+it("LRN-09/AC-9.5 journals the instruction hashes assemblePrompt produces, not a module variable", async () => {
+  const assembled = assemblePrompt({
+    session: {
+      meta: undefined,
+      lastSeq: 0,
+      lastActivityAt: undefined,
+      conversation: [{ kind: "user_message", schemaVersion: 1, text: "hi" }],
+      toolCalls: [],
+      toolResults: [],
+      pendingCallIds: [],
+      permissions: [],
+      checkpoints: [],
+      compactions: [],
+      repairs: [],
+      prompts: [],
+      unknownEntries: [],
+      diagnostics: [],
+      resumable: false,
+    },
+    model: "fixture",
+    environment: { cwd: "/repo", projectRoot: "/repo", os: "darwin/arm64", date: "2026-09-06" },
+    instructions: [{ path: "AGENTS.md", sha256: "4".repeat(64), content: "guidelines" }],
+    tools: [],
+  });
+  const loc = await location();
+  const writer = await JournalWriter.open(loc);
+  await writer.append(
+    { kind: "prompt", schemaVersion: 1, instructions: [...assembled.instructions] },
+    { by: "system" },
+  );
+  await writer.close();
+  const read = await new JournalReader(loc).readAll(loc.sessionId);
+  expect(materialize(read.records).prompts).toEqual([
+    {
+      kind: "prompt",
+      schemaVersion: 1,
+      instructions: [{ path: "AGENTS.md", sha256: "4".repeat(64) }],
+    },
+  ]);
 });
 
 it.each(["text", "truncated"] as const)(

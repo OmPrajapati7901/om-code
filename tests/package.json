@@ -13,6 +13,7 @@
     "@om-code/storage": "workspace:*",
     "@om-code/session": "workspace:*",
     "@om-code/providers": "workspace:*",
+    "@om-code/kernel": "workspace:*",
     "@types/node": "24.13.3",
     "fast-check": "4.9.0",
     "typescript": "5.9.3",

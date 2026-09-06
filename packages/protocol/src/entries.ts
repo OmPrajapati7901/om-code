@@ -1,11 +1,12 @@
 /**
- * The ten journal entry kinds (LRN-05, blueprint §7) plus the version
- * registry (AC-5.4).
+ * The eleven journal entry kinds (LRN-05, blueprint §7; `prompt` added in
+ * LRN-09) plus the version registry (AC-5.4).
  *
  * The four M1 kinds (session_start, user_message, assistant_message,
  * turn_end) are tight. The six M2/M3 kinds carry exactly the fields blueprint
  * §7 names, with undefined sub-types modeled minimally at schemaVersion 1;
- * their owning tasks (LRN-17, 21, 23, 28, 39) extend and bump.
+ * their owning tasks (LRN-17, 21, 23, 28, 39) extend and bump. `prompt`
+ * (LRN-09) is the one M1 addition blueprint §7 did not anticipate.
  *
  * Each entry carries schemaVersion so kinds evolve independently (the
  * architecture doc's R12 mitigation: schemaVersion per node type, adjacent
@@ -166,6 +167,20 @@ export const checkpointV1 = z
   })
   .strict();
 
+/**
+ * prompt (LRN-09/AC-9.5): which instruction files entered the system prompt,
+ * by content hash, so an edited AGENTS.md/CLAUDE.md is visible in the
+ * journal even though assembly itself is fs-free. LRN-20 owns discovery and
+ * may extend this to v2.
+ */
+export const promptV1 = z
+  .object({
+    kind: z.literal("prompt"),
+    schemaVersion: z.literal(1),
+    instructions: z.array(fileSnapshotSchema),
+  })
+  .strict();
+
 export const compactionV1 = z
   .object({
     kind: z.literal("compaction"),
@@ -210,6 +225,7 @@ export type Checkpoint = z.infer<typeof checkpointV1>;
 export type Compaction = z.infer<typeof compactionV1>;
 export type Repair = z.infer<typeof repairV1>;
 export type TurnEnd = z.infer<typeof turnEndV1>;
+export type Prompt = z.infer<typeof promptV1>;
 
 function v1(schema: z.ZodType): ReadonlyMap<number, z.ZodType> {
   return new Map([[1, schema]]);
@@ -229,6 +245,7 @@ export const ENTRY_SCHEMAS = {
   compaction: v1(compactionV1),
   repair: v1(repairV1),
   turn_end: v1(turnEndV1),
+  prompt: v1(promptV1),
 } satisfies Record<string, ReadonlyMap<number, z.ZodType>>;
 
 export type EntryKind = keyof typeof ENTRY_SCHEMAS;
@@ -245,4 +262,5 @@ export type Entry =
   | Checkpoint
   | Compaction
   | Repair
-  | TurnEnd;
+  | TurnEnd
+  | Prompt;

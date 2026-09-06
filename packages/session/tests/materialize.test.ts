@@ -51,6 +51,11 @@ it("preserves metadata, state records and unknown entries without mutating its i
       },
     },
     { kind: "turn_end", schemaVersion: 1, usage: { kind: "unknown" } },
+    {
+      kind: "prompt",
+      schemaVersion: 1,
+      instructions: [{ path: "AGENTS.md", sha256: "0".repeat(64) }],
+    },
   ];
   const records = entries.map((entry, index) => ({
     v: 1 as const,
@@ -69,12 +74,13 @@ it("preserves metadata, state records and unknown entries without mutating its i
     permissions: [entries[1]],
     checkpoints: [entries[2]],
     compactions: [entries[3]],
-    lastSeq: 5,
+    prompts: [entries[5]],
+    lastSeq: 6,
   });
   expect(JSON.stringify(records)).toBe(before);
   const parsed = parseRecord({
     ...records[0],
-    seq: 6,
+    seq: 7,
     entry: { kind: "future", schemaVersion: 1, raw_value: 42 },
   });
   if (!parsed.ok) throw parsed.error;
