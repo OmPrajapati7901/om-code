@@ -1,5 +1,6 @@
 packages:
   - packages/*
+  - tests
 
 # pnpm >=10 blocks dependency install scripts unless named here. Keep this list
 # short and justified: every entry is third-party code we let run at install.

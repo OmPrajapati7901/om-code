@@ -1,6 +1,6 @@
 # ADR-023: macOS and OpenAI-Compatible First, with Extension Points
 
-- **Status:** Accepted scope; implementation not started
+- **Status:** Accepted scope; M1 foundations implemented
 - **Date:** 2026-09-05
 - **Decision source:** The user's direction: personal learning, MacBook only for now, OpenAI-compatible model format initially, open to extension.
 - **Related:** [current blueprint](../om-code-master-delivery-blueprint.md), [current architecture](../coding-agent-harness-final-architecture.md), [current backlog](../om-code-agent-execution-backlog.md).
@@ -82,3 +82,14 @@ The user needs another API, platform, integration, or release channel; an observ
 workflow needs a deferred feature; or measurements justify a more advanced
 storage/context design. Add the corresponding adapter and tests explicitly.
 Do not widen scope based only on an archived roadmap entry.
+
+## 2026-09-06 implementation clarification — native journal lock
+
+The user selected full verification, fsync on every append, and automatic recovery after a
+writer is killed. LRN-06 therefore brings forward the packaged `fs-native-extensions@1.5.0`
+addon solely for storage-owned macOS BSD advisory locking. This does not introduce the Rust
+executor, an alternative platform, or a native sandbox adapter before M4. The permanent lock
+inode survives repair; the OS releases ownership on process death. The model port omits
+capabilities until the deferred compatibility layer has an implemented consumer.
+
+See [LRN-06/07 contracts and evidence](../lrn-06-07-implementation-evidence.md).

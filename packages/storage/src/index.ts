@@ -42,3 +42,13 @@ export {
   SETTINGS,
   type SettingKey,
 } from "./config/settings.js";
+export { isJournalError, JournalError, type JournalErrorKind } from "./journal/errors.js";
+export { type JournalLocation, type JournalPaths, journalPaths } from "./journal/files.js";
+export { type JournalRead, JournalReader, type TailDiagnostic } from "./journal/reader.js";
+export {
+  type AppendContext,
+  type JournalHooks,
+  type JournalStage,
+  JournalWriter,
+  type JournalWriterOptions,
+} from "./journal/writer.js";

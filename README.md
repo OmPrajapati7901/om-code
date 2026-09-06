@@ -18,7 +18,13 @@ A terminal coding agent harness for macOS, built to understand agent-system desi
 
 ## Status
 
-Pre-implementation. Planning complete (Sept 5, 2026). No code built yet.
+M1 foundations are implemented: configuration, protocol schemas, durable journal/materialization,
+and the OpenAI-compatible streaming provider. The fake provider/recorder, prompt assembly,
+turn loop and conversational CLI remain LRN-08–11.
+
+Run `pnpm install --frozen-lockfile` and `pnpm run check`. See the
+[LRN-06/07 evidence and contracts](docs/lrn-06-07-implementation-evidence.md) for recovery,
+streaming, manual verification commands and current limits.
 
 ---
 

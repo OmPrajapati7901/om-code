@@ -1,9 +1,9 @@
 {
-  "name": "@om-code/storage",
+  "name": "@om-code/session",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Host-owned application state: config loader, journals, blobs, locks (LRN-04)",
+  "description": "Pure session materialization",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=24"
@@ -19,14 +19,10 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@om-code/protocol": "workspace:*",
-    "fs-native-extensions": "1.5.0",
-    "uuid": "14.0.2",
-    "zod": "4.5.4"
+    "@om-code/protocol": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "24.13.3",
-    "fast-check": "4.9.0",
     "typescript": "5.9.3",
     "vitest": "3.2.7"
   }

@@ -9,6 +9,17 @@ import { isProtocolError, parseRecord } from "../src/index.js";
 import { makeRecord, VALID_ENTRIES } from "./fixtures.js";
 
 describe("parseRecord", () => {
+  it.each(["constructor", "__proto__", "toString"])(
+    "preserves inherited registry property %s as an unknown kind (LRN-06 regression)",
+    (kind) => {
+      const result = parseRecord(makeRecord({ kind, schemaVersion: 1 }));
+      expect(result).toMatchObject({
+        ok: true,
+        unknownEntry: true,
+        record: { entry: { original_kind: kind } },
+      });
+    },
+  );
   it("parses a valid record for every known kind", () => {
     for (const entry of Object.values(VALID_ENTRIES)) {
       const result = parseRecord(makeRecord(entry));

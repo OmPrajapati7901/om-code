@@ -1,0 +1,21 @@
+{
+  "name": "@om-code/tests",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@om-code/protocol": "workspace:*",
+    "@om-code/storage": "workspace:*",
+    "@om-code/session": "workspace:*",
+    "@om-code/providers": "workspace:*",
+    "@types/node": "24.13.3",
+    "fast-check": "4.9.0",
+    "typescript": "5.9.3",
+    "vitest": "3.2.7"
+  }
+}

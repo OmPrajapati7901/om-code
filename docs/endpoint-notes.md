@@ -5,9 +5,8 @@
 - **Model:** `qwen/qwen3.8-27b` (verified present via `GET /v1/models`)
 - **Credential:** read from `GROQ_API_KEY` env var (local `.env`, untracked, never committed).
   No credential appears in this file or in any capture.
-- **Spike script:** `tmp/lrn01-spike.mjs` — retained on disk untracked per developer
-  request, **not committed** (deviation from AC-1.6 recorded; the commit contains
-  no source code, only this note).
+- **Spike script:** `tmp/lrn01-spike.mjs` — deleted after the run (AC-1.6).
+  Only the credential-free raw captures were retained for LRN-07 fixtures.
 
 ## AC-1.1 — Plain-text streaming shape (verbatim)
 
@@ -87,10 +86,10 @@ Recorded answers:
    Adapter rule: non-2xx on the POST is an immediate typed error (no retry for
    4xx except 429 — see below), never a truncated stream.
 
-2. **Mid-stream disconnect** (client cancelled after 2 chunks): clean local
-   abort, 2 events observed, no hang, no error from the endpoint side. Adapter
-   rule (LRN-07d): surface a typed disconnect error + journal the partial
-   assistant message.
+2. **Client cancellation** (cancelled after 2 chunks): clean local abort,
+   2 events observed, no hang, no error from the endpoint side. This observes
+   cancellation, not a remote disconnect. LRN-07d distinguishes typed `aborted`
+   from `disconnected`; both carry the partial assistant response for journaling.
 
 3. **Rate limit (observed opportunistically):** HTTP `429` + JSON body
    `{"error":{"message":"Rate limit reached for model … OTPM: Limit 1000, Used
@@ -117,3 +116,20 @@ evidence captures (`tmp/lrn01-raw-*.sse`, `tmp/lrn01-summary.json`), kept as
 source material for the LRN-07c fixture; they contain no credentials and must
 stay out of the LRN-01 commit (`git status` for the commit shows only
 `docs/endpoint-notes.md` and the backlog status update).
+
+## LRN-07 live adapter smoke — 2026-09-06
+
+Executed the implemented adapter under Node 24.20.0 on macOS arm64 using
+`node --env-file=.env tests/manual/provider-smoke.mjs`. Each request was capped at
+512 completion tokens by the manual harness. Credentials were excluded from output and checked
+against the committed captures. The default suite did not make these requests.
+
+| Run | Incremental events | Result | Reported usage |
+|---|---|---|---|
+| Text | 2 text deltas | `hello world`, stop | input 18, output 3, total 21 |
+| Forced function | 1 tool-call delta | `get_weather`, raw `{"city":"Paris"}`, tool_calls | input 280, output 26, total 306 |
+
+Both runs returned exactly one start and one terminal complete event. Neither emitted a
+reasoning delta. `reasoning_content` mapping has a synthetic test; it is not claimed as a
+new live observation. Re-serialized LRN-01 fixtures establish payload shapes, while synthetic
+fixtures establish byte framing and fragmentation behavior.

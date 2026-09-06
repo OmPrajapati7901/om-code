@@ -6,14 +6,13 @@
  * additionally carries schemaVersion (AC-5.4) so kinds evolve independently.
  *
  * Unlike LRN-04's read.ts, parseRecord returns a result instead of throwing:
- * a config file is all-or-nothing, but LRN-06's corrupt-tail repair
- * (LR-FR-002) must keep reading past a bad record to find where the journal
- * stops being valid.
+ * storage needs to distinguish incompatible schemas from integrity failures.
+ * LRN-06 stops on any invalid complete record; only an unterminated final
+ * fragment may be repaired (LR-FR-002).
  *
  * Note for LRN-06: sha256 is computed over entry (blueprint §7:307), so the
- * journal should hash the original record text rather than a re-serialized
- * object wherever it can — key order is preserved on `raw` here, but that is
- * a property of V8's object ordering, not a guarantee this package carries.
+ * journal hashes the canonical original entry, before this parser wraps an
+ * unknown kind. LRN-06 defines the canonical encoding in storage.
  */
 
 import { z } from "zod";
@@ -29,7 +28,7 @@ import {
 
 export const ENVELOPE_VERSION = 1;
 
-const envelopeSchema = z
+export const envelopeSchema = z
   .object({
     v: z.literal(ENVELOPE_VERSION),
     seq: seqSchema,
@@ -63,6 +62,8 @@ export type JournalRecord = Omit<Envelope, "entry"> & { readonly entry: Entry };
 export type UnknownEntryRecord = Omit<Envelope, "entry"> & {
   readonly entry: UnknownEntry;
 };
+
+export type ReadableRecord = JournalRecord | UnknownEntryRecord;
 
 export type UnknownEntry = {
   readonly kind: "unknown_entry";
@@ -127,7 +128,7 @@ export function parseRecord(input: unknown): ParseResult {
     return { ok: false, error: invalidEntry("entry", "an object with kind and schemaVersion") };
   }
 
-  if (!(kind in ENTRY_SCHEMAS)) {
+  if (!Object.hasOwn(ENTRY_SCHEMAS, kind)) {
     const preserved: UnknownEntryRecord = {
       ...rest,
       entry: {

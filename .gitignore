@@ -1,5 +1,6 @@
 # LRN-02: dependency, build, runtime-state and secret hygiene
 node_modules/
+.pnpm-store/
 target/
 runs/
 .om-code/

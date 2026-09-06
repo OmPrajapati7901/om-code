@@ -19,25 +19,14 @@
 
 import { z } from "zod";
 import { capabilityRequestSchema } from "./capability.js";
+import { textBlockSchema, thinkingBlockSchema } from "./content.js";
+import { assistantMessageV2 } from "./model.js";
 import { toolStatusSchema, usageSchema } from "./primitives.js";
 import { sessionMetaSchema } from "./session.js";
 
+export { textBlockSchema, thinkingBlockSchema } from "./content.js";
+
 /** Content blocks (archived doc's four block types, architecture:611). */
-export const textBlockSchema = z
-  .object({
-    type: z.literal("text"),
-    text: z.string(),
-  })
-  .strict();
-
-export const thinkingBlockSchema = z
-  .object({
-    type: z.literal("thinking"),
-    text: z.string(),
-    signature: z.string().optional(),
-  })
-  .strict();
-
 export const toolUseBlockSchema = z
   .object({
     type: z.literal("tool_use"),
@@ -211,7 +200,9 @@ export const turnEndV1 = z
 
 export type SessionStart = z.infer<typeof sessionStartV1>;
 export type UserMessage = z.infer<typeof userMessageV1>;
-export type AssistantMessage = z.infer<typeof assistantMessageV1>;
+export type AssistantMessage =
+  | z.infer<typeof assistantMessageV1>
+  | z.infer<typeof assistantMessageV2>;
 export type ToolCall = z.infer<typeof toolCallV1>;
 export type ToolResult = z.infer<typeof toolResultV1>;
 export type Permission = z.infer<typeof permissionV1>;
@@ -227,7 +218,10 @@ function v1(schema: z.ZodType): ReadonlyMap<number, z.ZodType> {
 export const ENTRY_SCHEMAS = {
   session_start: v1(sessionStartV1),
   user_message: v1(userMessageV1),
-  assistant_message: v1(assistantMessageV1),
+  assistant_message: new Map<number, z.ZodType>([
+    [1, assistantMessageV1],
+    [2, assistantMessageV2],
+  ]),
   tool_call: v1(toolCallV1),
   tool_result: v1(toolResultV1),
   permission: v1(permissionV1),

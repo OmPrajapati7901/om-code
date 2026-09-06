@@ -1,0 +1,279 @@
+/** AC-6.4, AC-7.4 and AC-7.7 cross-package evidence. No production reverse edge. */
+import { appendFile, mkdir, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { type Entry, type ModelResponse, ProviderError } from "@om-code/protocol";
+import { OpenAICompatibleProvider } from "@om-code/providers";
+import { materialize } from "@om-code/session";
+import { JournalReader, JournalWriter, journalPaths } from "@om-code/storage";
+import fc from "fast-check";
+import { afterEach, expect, it } from "vitest";
+import { assertNoSecret } from "../packages/storage/tests/helpers/secret-guard.js";
+import { adapterFor } from "./contract/adapter-fixtures.js";
+import { contractRequest } from "./contract/provider.js";
+
+const roots: string[] = [];
+async function location() {
+  const root = await mkdtemp(join(tmpdir(), "om-integration-"));
+  roots.push(root);
+  const projectRoot = join(root, "project");
+  await mkdir(projectRoot);
+  return {
+    projectRoot,
+    omHome: join(root, "home"),
+    sessionId: "0193b4c8-0000-7000-8000-000000000001",
+  };
+}
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map((path) => rm(path, { recursive: true, force: true })));
+});
+
+it("AC-6.4 append/read/materialize agrees with an independent generated reference", async () => {
+  const action = fc.oneof(
+    fc.constantFrom<Entry>(
+      {
+        kind: "session_start",
+        schemaVersion: 1,
+        meta: {
+          id: "0193b4c8-0000-7000-8000-000000000001",
+          project_root: "/fixture",
+          cwd: "/fixture",
+          created_at: "2026-09-06T00:00:00Z",
+          updated_at: "2026-09-06T00:00:00Z",
+          status: "active",
+          mode: "manual",
+          model: { id: "fixture", base_url: "https://fixture.test" },
+          tags: [],
+        },
+      },
+      {
+        kind: "permission",
+        schemaVersion: 1,
+        call_id: "c1",
+        decision: "deny",
+        scope: "once",
+        decided_by: "user",
+        reason: "test",
+      },
+      { kind: "checkpoint", schemaVersion: 1, files: [], restorable: false },
+      {
+        kind: "compaction",
+        schemaVersion: 1,
+        covers: { from: 1, to: 2 },
+        summary: {
+          goal: "test",
+          decisions: [],
+          constraints: [],
+          changed_files: [],
+          tests: [],
+          failed_attempts: [],
+          approved_permissions: [],
+          open_questions: [],
+          next_steps: [],
+        },
+      },
+      { kind: "repair", schemaVersion: 1, reason: "fixture", truncated_from: 1 },
+      { kind: "turn_end", schemaVersion: 1, usage: { kind: "unknown" } },
+      {
+        kind: "assistant_message",
+        schemaVersion: 2,
+        content: [],
+        tool_calls: [{ index: 0, arguments_raw: "{partial" }],
+        usage: { kind: "unknown" },
+        outcome: { kind: "interrupted", reason: "aborted" },
+      },
+    ),
+    fc.string().map((text) => ({ kind: "user_message", schemaVersion: 1, text }) as const),
+    fc.string().map(
+      (text) =>
+        ({
+          kind: "assistant_message",
+          schemaVersion: 1,
+          content: [{ type: "text", text }],
+          usage: { kind: "unknown" },
+        }) as const,
+    ),
+    fc.tuple(fc.nat(4), fc.jsonValue()).map(
+      ([id, input]) =>
+        ({
+          kind: "tool_call",
+          schemaVersion: 1,
+          call_id: `c${id}`,
+          tool: "read",
+          input,
+          capability: { risk_class: "read" },
+        }) as const,
+    ),
+    fc.nat(4).map(
+      (id) =>
+        ({
+          kind: "tool_result",
+          schemaVersion: 1,
+          call_id: `c${id}`,
+          preview: "result",
+          bytes: 6,
+          truncated: false,
+          status: "ok",
+        }) as const,
+    ),
+  );
+  await fc.assert(
+    fc.asyncProperty(fc.array(action, { maxLength: 30 }), async (actions) => {
+      const loc = await location();
+      const writer = await JournalWriter.open({ ...loc, hooks: { sync: async () => {} } });
+      const expectedMessages: unknown[] = [];
+      const pending = new Set<string>();
+      for (const action of actions) {
+        const entry = JSON.parse(JSON.stringify(action)) as Entry;
+        await writer.append(entry, { by: "system" });
+        if (entry.kind === "user_message" || entry.kind === "assistant_message")
+          expectedMessages.push(entry);
+        if (entry.kind === "tool_call") pending.add(entry.call_id);
+        if (entry.kind === "tool_result") pending.delete(entry.call_id);
+      }
+      await writer.close();
+      const reader = new JournalReader(loc);
+      const before = await readFile(journalPaths(loc, loc.sessionId).journal);
+      const first = await reader.readAll(loc.sessionId);
+      const second = await reader.readAll(loc.sessionId);
+      expect(first).toEqual(second);
+      expect(await readFile(journalPaths(loc, loc.sessionId).journal)).toEqual(before);
+      expect(first.records.map((record) => record.seq)).toEqual(
+        actions.map((_, index) => index + 1),
+      );
+      expect(first.records.map((record) => record.entry)).toEqual(
+        JSON.parse(JSON.stringify(actions)),
+      );
+      expect(materialize(first.records)).toEqual(materialize(second.records));
+      expect(materialize(first.records)).toMatchObject({
+        conversation: expectedMessages,
+        pendingCallIds: [...pending],
+        permissions: actions.filter((entry) => entry.kind === "permission"),
+        checkpoints: actions.filter((entry) => entry.kind === "checkpoint"),
+        compactions: actions.filter((entry) => entry.kind === "compaction"),
+        repairs: actions.filter((entry) => entry.kind === "repair"),
+      });
+    }),
+    { numRuns: 50 },
+  );
+});
+
+it.each(["text", "truncated"] as const)(
+  "unknown usage and %s output survive real journal storage",
+  async (scenario) => {
+    let response: ModelResponse | undefined;
+    try {
+      for await (const event of adapterFor(scenario).stream(
+        contractRequest,
+        new AbortController().signal,
+      ))
+        if (event.type === "message_stop") response = event.response;
+    } catch (error) {
+      if (!(error instanceof ProviderError)) throw error;
+      response = error.partial;
+    }
+    expect(response).toBeDefined();
+    if (!response) throw new Error("missing response");
+    const loc = await location();
+    const writer = await JournalWriter.open(loc);
+    await writer.append(
+      { kind: "assistant_message", schemaVersion: 2, ...response },
+      { by: "model", turn_id: "turn" },
+    );
+    await writer.close();
+    const read = await new JournalReader(loc).readAll(loc.sessionId);
+    expect(response.usage).toEqual({ kind: "unknown" });
+    expect(read.records[0]?.entry).toMatchObject(response);
+  },
+);
+
+it.each([
+  { reason: "disconnected", tool: false },
+  { reason: "aborted", tool: false },
+  { reason: "disconnected", tool: true },
+  { reason: "aborted", tool: true },
+] as const)("AC-7.7 journals $reason output exactly (tool: $tool)", async ({ reason, tool }) => {
+  const raw = '{"path":"unfinished';
+  const delta = tool
+    ? { tool_calls: [{ index: 0, function: { arguments: raw } }] }
+    : { content: raw };
+  const body = `data: ${JSON.stringify({ id: "partial", model: "fixture", choices: [{ index: 0, delta: { role: "assistant", ...delta }, finish_reason: null }] })}\n\n`;
+  const provider = new OpenAICompatibleProvider({
+    baseUrl: "https://fixture.test",
+    fetchImpl: async () => new Response(body, { headers: { "content-type": "text/event-stream" } }),
+  });
+  let partial: ModelResponse | undefined;
+  const controller = new AbortController();
+  try {
+    for await (const event of provider.stream(contractRequest, controller.signal)) {
+      if (reason === "aborted" && event.type === (tool ? "tool_call_delta" : "text_delta"))
+        controller.abort();
+    }
+  } catch (error) {
+    if (!(error instanceof ProviderError)) throw error;
+    partial = error.partial;
+  }
+  if (!partial) throw new Error("missing partial");
+  const loc = await location();
+  const writer = await JournalWriter.open(loc);
+  await writer.append({ kind: "assistant_message", schemaVersion: 2, ...partial }, { by: "model" });
+  await writer.close();
+  expect(
+    materialize((await new JournalReader(loc).readAll(loc.sessionId)).records).conversation[0],
+  ).toMatchObject({
+    content: tool ? [] : [{ type: "text", text: raw }],
+    tool_calls: tool ? [{ index: 0, arguments_raw: raw }] : [],
+    outcome: { kind: "interrupted", reason },
+  });
+});
+
+it("keeps adapter credentials out of journals, repair backups, fixtures and error output", async () => {
+  const sentinel = "sk-journal-sentinel-do-not-store-64be781f";
+  let authenticated = false;
+  const provider = new OpenAICompatibleProvider({
+    baseUrl: "https://fixture.test",
+    getApiKey: () => sentinel,
+    fetchImpl: async (_url, init) => {
+      authenticated = new Headers(init?.headers).get("Authorization") === `Bearer ${sentinel}`;
+      return new Response(JSON.stringify({ error: { message: `invalid key ${sentinel}` } }), {
+        status: 401,
+      });
+    },
+  });
+  let diagnostic = "";
+  try {
+    for await (const _event of provider.stream(contractRequest, new AbortController().signal)) {
+      throw new Error("HTTP failure must not emit events");
+    }
+  } catch (error) {
+    if (!(error instanceof ProviderError)) throw error;
+    diagnostic = String(error);
+  }
+  expect(authenticated).toBe(true);
+  expect(diagnostic).toContain("[redacted]");
+  expect(diagnostic).not.toContain(sentinel);
+  const loc = await location();
+  let writer = await JournalWriter.open(loc);
+  await writer.append(
+    {
+      kind: "assistant_message",
+      schemaVersion: 2,
+      content: [{ type: "text", text: diagnostic }],
+      tool_calls: [],
+      usage: { kind: "unknown" },
+      outcome: { kind: "complete" },
+    },
+    { by: "system" },
+  );
+  await writer.close();
+  const paths = journalPaths(loc, loc.sessionId);
+  await appendFile(paths.journal, "{partial");
+  writer = await JournalWriter.open(loc);
+  await writer.close();
+  expect((await readdir(paths.directory)).some((name) => name.includes(".corrupt."))).toBe(true);
+  assertNoSecret(loc.omHome, sentinel);
+  assertNoSecret(
+    new URL("../packages/providers/tests/fixtures", import.meta.url).pathname,
+    sentinel,
+  );
+});

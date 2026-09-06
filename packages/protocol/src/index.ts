@@ -55,6 +55,24 @@ export {
   unknownSchemaVersion,
 } from "./errors.js";
 export {
+  type AssistantMessageV2,
+  assistantMessageV2,
+  type CompleteToolCall,
+  isProviderError,
+  type ModelEvent,
+  type ModelMessage,
+  type ModelProvider,
+  type ModelRequest,
+  type ModelResponse,
+  type ModelTool,
+  modelResponseSchema,
+  ProviderError,
+  type ProviderErrorKind,
+  type RawToolCall,
+  rawToolCallSchema,
+  type StreamFailureKind,
+} from "./model.js";
+export {
   type Actor,
   actorSchema,
   recordIdSchema,
@@ -71,11 +89,13 @@ export {
 export {
   ENVELOPE_VERSION,
   type Envelope,
+  envelopeSchema,
   type JournalRecord,
   type ParseFailure,
   type ParseResult,
   type ParseSuccess,
   parseRecord,
+  type ReadableRecord,
   type UnknownEntry,
   type UnknownEntryRecord,
 } from "./record.js";

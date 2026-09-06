@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "rootDir": "." },
+  "include": ["contract/**/*.ts"],
+  "exclude": ["dist", "node_modules"]
+}

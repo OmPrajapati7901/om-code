@@ -17,15 +17,21 @@ After every change, assess whether it introduces durable context that other agen
 
 ## Build, Test, and Development Commands
 
-The pnpm workspace exists as of LRN-03 and now holds `packages/cli`, `packages/storage` (LRN-04) and `packages/protocol` (LRN-05). Do not claim a gate passed without running it.
+The pnpm workspace holds `cli`, `storage`, `protocol`, `session` (pure materialization), `providers` (Chat Completions), and a private root `tests/` workspace for shared contracts and integration. Do not claim a gate passed without running it.
 
 - `pnpm install --frozen-lockfile` — reproduce pinned TypeScript dependencies.
 - `pnpm run check` — the full local gate: lint, typecheck, build, test, in that order.
 - `pnpm run lint` (Biome), and `pnpm -r --if-present run typecheck`, `test`, `build` — the individual gates; required packages must define these scripts.
+- `pnpm --filter @om-code/tests test` — shared provider contracts, boundary checks, and journal integration; build first when running individual suites.
+- `node tests/manual/transport-close.mjs` — explicit loopback socket-close verification, outside the default socket-free suite.
+- `node tests/manual/journal-demo.mjs` — explicit native-lock/SIGKILL/repair and file-permission demonstration using temporary state.
+- `node --env-file=.env tests/manual/provider-smoke.mjs` — explicit paid text/tool smoke, capped at 512 completion tokens per request; never part of `pnpm test`.
 - `pretypecheck` builds the workspace first, so a package typechecks against the built declarations of the workspace packages it imports (rather than their sources).
 - `pnpm add --global ./packages/cli` — put `om` on your PATH. `pnpm link --global` was removed in pnpm 11, and `~/Library/pnpm/bin` must be on PATH first (`pnpm setup`).
 
 There is no `pnpm dev` yet: no long-running development workflow exists until `om run` lands in LRN-11.
+
+`fs-native-extensions@1.5.0` is the sole early native runtime dependency, confined to storage for nonblocking macOS BSD advisory locks. Its packaged native addon loads without adding a Cargo workspace. Keep its lock inode permanent; never unlink it or replace it during journal repair.
 
 Rust is not in this repository yet — the Cargo workspace and `native/om-stub` arrive in M4 (LRN-30), and until then these are the commands that will apply, not commands you can run:
 
@@ -44,6 +50,10 @@ Keep provider-specific logic and SDK types out of `packages/kernel`. `packages/p
 
 Field naming: the journal is a wire format, so its fields are snake_case (`turn_id`, `call_id`, `risk_class`) to mirror the Rust DTOs in M4, where snake_case is idiomatic. TypeScript-internal state (LRN-04's config: `baseUrl`) stays camelCase.
 
+Journal append assigns identity/sequence and fsyncs every record before resolving. Readers verify the entire file before sequence filtering. Only an unterminated final fragment is automatically repairable: preserve the original, then atomically publish the verified prefix plus a repair entry. Terminated corruption and incompatible versions block writes. Journal files live at `<OM_HOME>/sessions/<project-hash>/<UUIDv7>.jsonl`; metadata comes from `session_start`.
+
+Model ports and `ProviderError` live in protocol. Providers and session depend on protocol only; storage does not re-export materialization. `assistant_message` v2 preserves raw tool calls and a typed complete/interrupted outcome; v1 stays readable. Local errors do not occupy `stop_reason`. Callers journal terminal responses and error partials; adapters perform no journal I/O or tool execution.
+
 All workspace reads, searches, writes, and command execution route through `packages/stub-client` to the sandboxed stub. Trusted host application-state reads/writes belong to `packages/storage` and are limited to application-owned configuration, journals, locks, and backups. Do not misapply the workspace I/O rule to force journal storage inside the sandbox. Host launch/setup effects are confined to reviewed boundary integration modules; document any sandbox dependency that performs them internally.
 
 ## Testing Guidelines
@@ -54,6 +64,6 @@ Cover stale edits, approval invalidation, incomplete tool streams, unknown usage
 
 ## Commit and Review Guidelines
 
-Git history is not present in this checkout. When git is initialized, use focused Conventional Commits such as `feat(session): reconcile interrupted edits` and link `LRN-*` tasks and `LR-FR-*` requirements. Keep changes near 400 lines where practical, excluding generated code and fixtures; documentation scope revisions may be larger.
+Git history is present. Use focused Conventional Commits such as `feat(session): reconcile interrupted edits` and link `LRN-*` tasks and `LR-FR-*` requirements. Keep changes near 400 lines where practical, excluding generated code and fixtures; documentation scope revisions may be larger.
 
 For this solo learning phase, review the change and record relevant test evidence, security/privacy impact, documentation updates, and screenshots if a TUI is added. The archived two-person/CODEOWNER requirement is deferred until there are actual collaborators or broader distribution. Do not invent reviewer sign-offs or claim an independent security review.
