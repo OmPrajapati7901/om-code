@@ -17,7 +17,7 @@ After every change, assess whether it introduces durable context that other agen
 
 ## Build, Test, and Development Commands
 
-The pnpm workspace holds `cli`, `storage`, `protocol`, `session` (pure materialization), `providers` (Chat Completions), and a private root `tests/` workspace for shared contracts and integration. Do not claim a gate passed without running it.
+The pnpm workspace holds `cli`, `storage`, `protocol`, `session` (pure materialization), `providers` (Chat Completions), `kernel` (system prompt assembly; LRN-10 adds the turn loop), and a private root `tests/` workspace for shared contracts and integration. Do not claim a gate passed without running it.
 
 - `pnpm install --frozen-lockfile` — reproduce pinned TypeScript dependencies.
 - `pnpm run check` — the full local gate: lint, typecheck, build, test, in that order.
@@ -52,6 +52,8 @@ Use Biome for TypeScript, and rustfmt/Clippy for Rust. Use ATX headings, concise
 Follow SOLID principles and sound object-oriented design where they improve clarity and changeability: keep modules and types focused on one responsibility, depend on narrow abstractions at architectural boundaries, prefer composition over inheritance, preserve substitutability, and expose small cohesive interfaces. Encapsulate invariants and keep dependencies explicit. Avoid speculative abstractions, unnecessary class hierarchies, and design patterns that add complexity without a demonstrated need; simple functions and data types are often the better design.
 
 Keep provider-specific logic and SDK types out of `packages/kernel`. `packages/protocol` is the wire-schema authority; Rust DTOs are generated or schema-checked mirrors. `packages/sandbox` and `packages/stub-client` depend on protocol contracts, not each other; the CLI composes them.
+
+`packages/kernel` is the only module that builds a system prompt (`role: "system"` message) or assembles a `ModelRequest`; nothing else appends to it (LR-FR-037). Assembly is a pure function of a `SessionView`, resolved config, and a caller-supplied environment/instruction-file snapshot — no clock or filesystem read inside it, so the same input always produces the same request. Instruction-file content enters by reference to its content hash via the `prompt` journal entry kind (protocol's eleventh, added in LRN-09; §7 of the blueprint only fixed ten).
 
 Field naming: the journal is a wire format, so its fields are snake_case (`turn_id`, `call_id`, `risk_class`) to mirror the Rust DTOs in M4, where snake_case is idiomatic. TypeScript-internal state (LRN-04's config: `baseUrl`) stays camelCase.
 

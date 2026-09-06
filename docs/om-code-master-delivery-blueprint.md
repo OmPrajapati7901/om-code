@@ -319,7 +319,8 @@ type Entry =
   | { kind: "checkpoint"; files: FileSnapshot[]; restorable: boolean }
   | { kind: "compaction"; covers: { from: number; to: number }; summary: StructuredSummary }
   | { kind: "repair"; reason: string; truncated_from: number }
-  | { kind: "turn_end"; usage: Usage; cost_usd?: number };
+  | { kind: "turn_end"; usage: Usage; cost_usd?: number }
+  | { kind: "prompt"; instructions: FileSnapshot[] };
 ```
 
 `ToolStatus` includes **`unknown`** — the state a call enters when the process died between its effect
@@ -356,6 +357,7 @@ journal from LRN-06 onward. Owning tasks extend and bump the affected kind.
 | `ModelRef` | `{ id: string; base_url: string }`, matching LRN-04's resolved settings |
 | `by: tool:` | `"user" \| "model" \| "system"` plus `tool:<name>` (no whitespace) |
 | `network` | Present as `never`: a record requesting network fails loudly naming D-01 |
+| `prompt` (LRN-09) | An eleventh kind, added after this section was written: `{ instructions: FileSnapshot[] }` — which instruction files entered the system prompt, by content hash (AC-9.5). §7's ten kinds had no home for it; a `session_start` v2 was rejected because a mid-session instruction-file re-read has nowhere to attach otherwise |
 
 Field naming: journal (wire) fields are snake_case to mirror the M4 Rust DTOs;
 TypeScript-internal state (LRN-04's config) stays camelCase (see `AGENTS.md`).

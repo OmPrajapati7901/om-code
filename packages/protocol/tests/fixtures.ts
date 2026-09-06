@@ -109,4 +109,9 @@ export const VALID_ENTRIES: Record<EntryKind, unknown> = {
     schemaVersion: 1,
     usage: { kind: "known", input_tokens: 10, output_tokens: 5 },
   },
+  prompt: {
+    kind: "prompt",
+    schemaVersion: 1,
+    instructions: [{ path: "AGENTS.md", sha256: "0".repeat(64) }],
+  },
 };

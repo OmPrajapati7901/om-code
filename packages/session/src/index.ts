@@ -8,6 +8,7 @@ import type {
   Checkpoint,
   Compaction,
   Permission,
+  Prompt,
   ReadableRecord,
   Repair,
   SessionMeta,
@@ -29,6 +30,7 @@ export type SessionView = {
   checkpoints: Checkpoint[];
   compactions: Compaction[];
   repairs: Repair[];
+  prompts: Prompt[];
   unknownEntries: UnknownEntry[];
   diagnostics: string[];
   resumable: boolean;
@@ -47,6 +49,7 @@ export function materialize(records: readonly ReadableRecord[]): SessionView {
     checkpoints: [],
     compactions: [],
     repairs: [],
+    prompts: [],
     unknownEntries: [],
     diagnostics: [],
     resumable: false,
@@ -84,6 +87,9 @@ export function materialize(records: readonly ReadableRecord[]): SessionView {
         break;
       case "repair":
         view.repairs.push(structuredClone(entry));
+        break;
+      case "prompt":
+        view.prompts.push(structuredClone(entry));
         break;
       case "unknown_entry":
         view.unknownEntries.push(structuredClone(entry));

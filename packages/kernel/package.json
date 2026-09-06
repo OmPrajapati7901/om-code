@@ -1,0 +1,30 @@
+{
+  "name": "@om-code/kernel",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pure system prompt assembly and turn loop",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@om-code/protocol": "workspace:*",
+    "@om-code/session": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "typescript": "5.9.3",
+    "vitest": "3.2.7"
+  }
+}
