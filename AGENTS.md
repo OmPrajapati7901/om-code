@@ -26,6 +26,7 @@ The pnpm workspace holds `cli`, `storage`, `protocol`, `session` (pure materiali
 - `node tests/manual/transport-close.mjs` — explicit loopback socket-close verification, outside the default socket-free suite.
 - `node tests/manual/journal-demo.mjs` — explicit native-lock/SIGKILL/repair and file-permission demonstration using temporary state.
 - `node --env-file=.env tests/manual/provider-smoke.mjs` — explicit paid text/tool smoke, capped at 512 completion tokens per request; never part of `pnpm test`.
+- `node --env-file=.env tests/manual/record-fixture.mjs <name>` — explicit paid capture that writes credential-stripped fixtures via `recordingFetch`; never part of `pnpm test`.
 - `pretypecheck` builds the workspace first, so a package typechecks against the built declarations of the workspace packages it imports (rather than their sources).
 - `pnpm add --global ./packages/cli` — put `om` on your PATH. `pnpm link --global` was removed in pnpm 11, and `~/Library/pnpm/bin` must be on PATH first (`pnpm setup`).
 
@@ -34,6 +35,8 @@ There is no `pnpm dev` yet: no long-running development workflow exists until `o
 `fs-native-extensions@1.5.0` is the sole early native runtime dependency, confined to storage for nonblocking macOS BSD advisory locks. Its packaged native addon loads without adding a Cargo workspace. Keep its lock inode permanent; never unlink it or replace it during journal repair.
 
 `packages/providers` depends on `@om-code/protocol` only: no LangChain, LangGraph, or other agent/LLM framework at the transport, prompt-assembly, or turn-loop layers. See [ADR-024](docs/adr/ADR-024-no-langchain.md) before adding one back.
+
+`packages/providers` also exports `FakeProvider` (a scripted `ModelProvider` double that replays turns through the same `ResponseProjection` the real adapter uses) and `recordingFetch` (a pure tee-and-redact `fetch` wrapper for capturing fixtures; it performs no file I/O itself). Scenario-to-script mappings for the shared contract suite live in the root `tests/contract/` workspace, not in `packages/providers`, mirroring how `adapter-fixtures.ts` already maps scenarios to the real adapter — keeps the dependency direction one-way (`tests` depends on `providers`, never the reverse).
 
 Rust is not in this repository yet — the Cargo workspace and `native/om-stub` arrive in M4 (LRN-30), and until then these are the commands that will apply, not commands you can run:
 
@@ -63,6 +66,8 @@ All workspace reads, searches, writes, and command execution route through `pack
 Use Vitest for unit, contract, and integration tests; fast-check for focused TypeScript properties; and Rust proptest for path/protocol invariants. Every behavioral fix needs a regression test named for its issue. Security-sensitive changes under `native/`, `packages/policy`, `packages/sandbox`, or `packages/stub-client` also require the relevant macOS escape suite.
 
 Cover stale edits, approval invalidation, incomplete tool streams, unknown usage, cancellation, and crashes between a tool effect and its durable result. Never automatically repeat an arbitrary command with an unknown outcome. Checks establish their tested scope; they do not establish universal sandbox safety or endpoint compatibility.
+
+Every `vitest.config.ts` loads `tests/guards/no-network.mjs` as a `setupFiles` entry: it patches `fetch`, `net`, `tls`, and `dns` to throw and record any attempt, and fails the test file even if a test swallows the throw. It has no loopback exception. A node child process our own tests spawn (e.g. `packages/storage`'s journal-process fixtures) needs the same guard passed explicitly via `node --import <path-to-guard>`, since `setupFiles` covers only the vitest worker itself; detect an actual vitest worker via `globalThis.__vitest_worker__`, never `process.env.VITEST`, since spawned children inherit that env var without a real vitest runtime to call `afterEach` on. `pnpm`/`tsc` child processes spawned by build tooling (e.g. `packages/cli`'s `bin.test.ts`) are outside this guard's scope. `tests/manual/*.mjs` commands run under bare `node`, deliberately outside every guard, for explicit paid or loopback checks.
 
 ## Commit and Review Guidelines
 

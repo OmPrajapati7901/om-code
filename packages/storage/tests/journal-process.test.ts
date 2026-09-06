@@ -17,10 +17,16 @@ async function location() {
   await mkdir(projectRoot);
   return { omHome: join(root, "home"), projectRoot, sessionId: v7() };
 }
+// AC-8.5: this child runs our own code, so it gets the shared network guard
+// too, via --import rather than vitest's setupFiles (which only covers the
+// worker process, not processes we spawn from it).
+const guardUrl = fileURLToPath(new URL("../../../tests/guards/no-network.mjs", import.meta.url));
 function child(options: unknown, stage: string) {
   const process = spawn(
     globalThis.process.execPath,
     [
+      "--import",
+      guardUrl,
       fileURLToPath(new URL("./fixtures/journal-child.mjs", import.meta.url)),
       JSON.stringify(options),
       stage,
