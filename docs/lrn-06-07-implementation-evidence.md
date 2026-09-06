@@ -1,9 +1,9 @@
 # LRN-06 and LRN-07a–d implementation evidence
 
 Verified on 2026-09-06 on macOS arm64 with Node **24.20.0** and pnpm **11.25.0**.
-Implementation and task acceptance checks pass. Changes remain uncommitted, so backlog rows
-remain `half completed` pending the universal DoD-7 commit/evidence gate. This is not an M1
-milestone completion claim: LRN-08 through LRN-11 still supply the fake provider, kernel and CLI.
+Implementation and task acceptance checks pass. Committed in `e13d130`, satisfying the universal
+DoD-7 commit/evidence gate; backlog rows for LRN-06 and LRN-07a–d read `completed`. This is not an
+M1 milestone completion claim: LRN-08 through LRN-11 still supply the fake provider, kernel and CLI.
 
 ## Reproducibility and full gate
 
