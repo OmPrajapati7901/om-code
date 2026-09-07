@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "types": [],
+    // dependency-cruiser only: resolve workspace imports to sources so
+    // `lint:deps` lints what is written, not stale `dist/` output, and needs
+    // no build first. Never extend this from a package tsconfig: packages
+    // typecheck against built declarations by design (AGENTS.md).
+    "baseUrl": ".",
+    "paths": {
+      "@om-code/kernel": ["packages/kernel/src/index.ts"],
+      "@om-code/protocol": ["packages/protocol/src/index.ts"],
+      "@om-code/providers": ["packages/providers/src/index.ts"],
+      "@om-code/session": ["packages/session/src/index.ts"],
+      "@om-code/storage": ["packages/storage/src/index.ts"],
+      "@om-code/stub-client": ["packages/stub-client/src/index.ts"]
+    }
+  },
+  "include": ["packages/*/src/**/*.ts", "tests/**/*.ts"]
+}

@@ -13,7 +13,8 @@ import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { loadSettings } from "@om-code/storage";
 import { describe, expect, it } from "vitest";
-import { type CliDeps, runCli } from "../src/cli.js";
+import { runCli } from "../src/cli.js";
+import type { CliDeps } from "../src/types.js";
 
 const HOST = { platform: "darwin", arch: "arm64" };
 

@@ -9,7 +9,8 @@ import { materialize } from "@om-code/session";
 import { JournalReader, listSessions, loadSettings } from "@om-code/storage";
 import { v7 } from "uuid";
 import { afterEach, describe, expect, it } from "vitest";
-import { type CliDeps, runCli } from "../src/cli.js";
+import { runCli } from "../src/cli.js";
+import type { CliDeps } from "../src/types.js";
 
 const roots: string[] = [];
 

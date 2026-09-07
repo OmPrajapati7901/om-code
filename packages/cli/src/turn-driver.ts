@@ -1,9 +1,9 @@
 import { type Environment, type JournalSink, runTurn } from "@om-code/kernel";
 import type { ModelProvider } from "@om-code/protocol";
 import type { SessionView } from "@om-code/session";
-import type { CliIo } from "./cli.js";
 import { EXIT, type ExitCode } from "./exit.js";
 import { prefixedError } from "./render.js";
+import type { CliIo } from "./types.js";
 
 export type DrivenTurn = {
   readonly exitCode: ExitCode;

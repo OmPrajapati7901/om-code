@@ -8,11 +8,11 @@ import {
   resolveOmHome,
 } from "@om-code/storage";
 import { booleanFlag, type FlagDefinition, parseArgs, stringFlag } from "../args.js";
-import type { CliDeps, CliResult } from "../cli.js";
 import { buildEnvironment } from "../environment.js";
 import { runRepl } from "../repl.js";
 import { bootstrapSession } from "../session-bootstrap.js";
 import { driveTurn } from "../turn-driver.js";
+import type { CliDeps, CliResult } from "../types.js";
 
 const FLAGS: readonly FlagDefinition[] = [
   { name: "prompt", short: "p", takesValue: true },

@@ -1,9 +1,9 @@
 import { createInterface } from "node:readline/promises";
 import type { ErrorEntry } from "@om-code/protocol";
-import type { CliIo } from "./cli.js";
 import { EXIT, type ExitCode } from "./exit.js";
 import { prefixedError } from "./render.js";
 import type { DrivenTurn } from "./turn-driver.js";
+import type { CliIo } from "./types.js";
 
 export type ReplInput = {
   readonly io: CliIo;

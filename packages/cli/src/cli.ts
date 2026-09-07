@@ -1,12 +1,9 @@
 /** Argument dispatch and injected runtime seams for `om`. */
 
-import type { ModelProvider } from "@om-code/protocol";
 import {
   type ConfigFlags,
   isConfigError,
-  type LoadSettingsOptions,
   type ResolvedSettings,
-  type RuntimeSettings,
   requireComplete,
 } from "@om-code/storage";
 import { booleanFlag, type FlagDefinition, parseArgs, stringFlag } from "./args.js";
@@ -15,37 +12,12 @@ import { runCommand } from "./commands/run.js";
 import { sessionsCommand } from "./commands/sessions.js";
 import { showCommand } from "./commands/show.js";
 import { EXIT } from "./exit.js";
-import { checkPlatform, type HostPlatform } from "./platform.js";
+import { checkPlatform } from "./platform.js";
 import { prefixedError } from "./render.js";
+import type { CliDeps, CliResult } from "./types.js";
 import { readVersion } from "./version.js";
 
-export type CliResult = {
-  readonly stdout: string;
-  readonly stderr: string;
-  readonly exitCode: number;
-};
-
-export type ConfigLoader = (options: LoadSettingsOptions) => ResolvedSettings;
-
-export type CliIo = {
-  readonly write: (text: string) => void;
-  readonly writeErr: (text: string) => void;
-  readonly input: NodeJS.ReadableStream;
-  readonly output: NodeJS.WritableStream;
-  readonly isTty: boolean;
-};
-
-export type CliDeps = {
-  readonly host: HostPlatform;
-  readonly env: Record<string, string | undefined>;
-  readonly cwd: string;
-  readonly loadSettings: ConfigLoader;
-  readonly io: CliIo;
-  readonly now: () => Date;
-  readonly newId: () => string;
-  readonly createProvider: (settings: RuntimeSettings) => ModelProvider;
-  readonly osLabel: string;
-};
+export type { CliDeps, CliIo, CliResult, ConfigLoader } from "./types.js";
 
 /** Commands the backlog defines but that no milestone has delivered yet. */
 const PLANNED_COMMANDS: ReadonlyMap<string, string> = new Map([["resume", "LRN-29"]]);

@@ -17,7 +17,24 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "preset": "recommended"
+      "preset": "recommended",
+      "style": {
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "paths": {
+              "node:fs": "Workspace I/O routes through @om-code/stub-client; host state through @om-code/storage (AGENTS.md, AC-14.1).",
+              "fs": "Workspace I/O routes through @om-code/stub-client; host state through @om-code/storage (AGENTS.md, AC-14.1).",
+              "node:fs/promises": "Workspace I/O routes through @om-code/stub-client; host state through @om-code/storage (AGENTS.md, AC-14.1).",
+              "fs/promises": "Workspace I/O routes through @om-code/stub-client; host state through @om-code/storage (AGENTS.md, AC-14.1).",
+              "node:child_process": "Only @om-code/stub-client spawns processes (blueprint section 6, AC-14.1).",
+              "child_process": "Only @om-code/stub-client spawns processes (blueprint section 6, AC-14.1).",
+              "node:module": "createRequire is a filesystem read in disguise (AC-14.1).",
+              "node:os": "Host reads belong to @om-code/storage (AC-14.1)."
+            }
+          }
+        }
+      }
     }
   },
   "javascript": {
@@ -27,6 +44,16 @@
       "trailingCommas": "all"
     }
   },
+  "overrides": [
+    {
+      "includes": ["packages/storage/**", "packages/stub-client/**", "native/**"],
+      "linter": { "rules": { "style": { "noRestrictedImports": "off" } } }
+    },
+    {
+      "includes": ["**/tests/**", "**/*.test.ts", "**/*.config.ts", "**/*.mjs", "scripts/**"],
+      "linter": { "rules": { "style": { "noRestrictedImports": "off" } } }
+    }
+  ],
   "assist": {
     "actions": {
       "source": {

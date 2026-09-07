@@ -1,9 +1,9 @@
 import { materialize } from "@om-code/session";
 import { findProjectRoot, JournalReader, listSessions, resolveOmHome } from "@om-code/storage";
 import { parseArgs } from "../args.js";
-import type { CliDeps, CliResult } from "../cli.js";
 import { EXIT } from "../exit.js";
 import { renderSessions } from "../render.js";
+import type { CliDeps, CliResult } from "../types.js";
 
 export async function sessionsCommand(argv: readonly string[], deps: CliDeps): Promise<CliResult> {
   const parsed = parseArgs(argv, "sessions", []);

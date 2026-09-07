@@ -1,4 +1,13 @@
-/** Temporary dependency checks until LRN-14; test-only OS reads are allowed. */
+/**
+ * What neither lint tool expresses (LRN-14 owns the rest). Biome's
+ * `noRestrictedImports` bans `node:fs`/`child_process`/`module`/`os` outside
+ * `storage`/`stub-client` (AC-14.1, asserted by `boundary-lint.test.ts`), and
+ * `dependency-cruiser` enforces direction on the real import graph (AC-14.4).
+ * This file keeps the declared-manifest allowlist — which catches
+ * declared-but-unused workspace deps that dependency-cruiser cannot see —
+ * plus the clock (AC-9.4), system-message (AC-9.1) and model-name (AC-7.5)
+ * greps. Test-only OS reads are allowed.
+ */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,9 +28,7 @@ type BoundarySpec = {
   readonly name: string;
   readonly allowedDependencies: readonly string[];
   readonly bannedDependencies: readonly string[];
-  readonly bansAllNodeImports: boolean;
   readonly bansClockReads: boolean;
-  readonly bansHostIo: boolean;
 };
 
 const BOUNDARIES: readonly BoundarySpec[] = [
@@ -36,25 +43,19 @@ const BOUNDARIES: readonly BoundarySpec[] = [
       "uuid",
     ],
     bannedDependencies: ["@om-code/sandbox", "@om-code/stub-client"],
-    bansAllNodeImports: false,
     bansClockReads: false,
-    bansHostIo: true,
   },
   {
     name: "session",
     allowedDependencies: ["@om-code/protocol"],
     bannedDependencies: [],
-    bansAllNodeImports: true,
     bansClockReads: false,
-    bansHostIo: true,
   },
   {
     name: "providers",
     allowedDependencies: ["@om-code/protocol"],
     bannedDependencies: [],
-    bansAllNodeImports: false,
     bansClockReads: false,
-    bansHostIo: true,
   },
   {
     name: "kernel",
@@ -65,35 +66,21 @@ const BOUNDARIES: readonly BoundarySpec[] = [
       "@om-code/sandbox",
       "@om-code/stub-client",
     ],
-    bansAllNodeImports: true,
     // AC-9.4: prompt assembly is a pure function of its input — the date is
     // passed in, never read live — so a clock call here is a regression.
     bansClockReads: true,
-    bansHostIo: true,
   },
   {
     name: "stub-client",
     allowedDependencies: ["@om-code/protocol"],
     bannedDependencies: ["@om-code/policy"],
-    bansAllNodeImports: false,
     bansClockReads: false,
-    // DoD-5 permits host I/O in exactly this module (plus storage and
-    // native/): LRN-13's local-ts driver lives here, so the fs/child_process
-    // grep below is skipped for it — LRN-13 must not have to unwind this.
-    bansHostIo: false,
   },
 ];
 
 it.each(BOUNDARIES)(
-  "$name keeps approved dependencies and performs no direct file/process I/O",
-  ({
-    name,
-    allowedDependencies,
-    bannedDependencies,
-    bansAllNodeImports,
-    bansClockReads,
-    bansHostIo,
-  }) => {
+  "$name keeps approved dependencies and reads no live clock",
+  ({ name, allowedDependencies, bannedDependencies, bansClockReads }) => {
     const path = resolve(root, "packages", name);
     const manifest = JSON.parse(readFileSync(join(path, "package.json"), "utf8"));
     expect(Object.keys(manifest.dependencies).sort()).toEqual([...allowedDependencies].sort());
@@ -102,14 +89,10 @@ it.each(BOUNDARIES)(
       ...(manifest.devDependencies ?? {}),
     };
     expect(bannedDependencies.filter((dependency) => dependency in declared)).toEqual([]);
+    if (!bansClockReads) return;
     for (const file of files(join(path, "src"))) {
       const source = readFileSync(file, "utf8");
-      if (bansHostIo)
-        expect(source).not.toMatch(
-          /(?:from\s*|import\s*\()["'](?:node:)?(?:fs(?:\/promises)?|child_process)["']/,
-        );
-      if (bansAllNodeImports) expect(source).not.toMatch(/["']node:/);
-      if (bansClockReads) expect(source).not.toMatch(/\bnew\s+Date\s*\(\s*\)|\bDate\.now\s*\(/);
+      expect(source).not.toMatch(/\bnew\s+Date\s*\(\s*\)|\bDate\.now\s*\(/);
     }
   },
 );
@@ -137,8 +120,9 @@ it("AC-10.5 dependency grep detects a planted kernel boundary violation", () => 
   ).toEqual([]);
 });
 
-// A grep signal, not a proof against aliases/data-driven dispatch. LRN-14 owns
-// dependency-cruiser; self-review still checks for a smuggled system message.
+// A grep signal, not a proof against aliases/data-driven dispatch.
+// dependency-cruiser owns direction; self-review still checks for a smuggled
+// system message.
 function buildsSystemMessage(source: string): boolean {
   // Requires a trailing comma so `{ role: "system" | "user"; ... }` — the
   // ModelMessage type union in protocol/src/model.ts — does not false-positive.
@@ -158,8 +142,9 @@ it("AC-9.1 system-message grep detects planted violations and scans every packag
   }
 });
 
-// A grep signal, not a proof against aliases/data-driven dispatch. LRN-14 owns
-// dependency-cruiser; self-review still checks model-derived behavior.
+// A grep signal, not a proof against aliases/data-driven dispatch.
+// dependency-cruiser owns direction; self-review still checks model-derived
+// behavior.
 function branchesOnModel(source: string): boolean {
   // Type checks validate payloads; they do not infer model capabilities.
   const withoutTypeChecks = source.replace(

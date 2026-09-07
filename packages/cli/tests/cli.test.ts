@@ -1,8 +1,9 @@
 import { createRequire } from "node:module";
 import { PassThrough } from "node:stream";
 import { describe, expect, it } from "vitest";
-import { type CliDeps, runCli } from "../src/cli.js";
+import { runCli } from "../src/cli.js";
 import type { HostPlatform } from "../src/platform.js";
+import type { CliDeps } from "../src/types.js";
 import { readVersion } from "../src/version.js";
 
 const requireFromHere = createRequire(import.meta.url);

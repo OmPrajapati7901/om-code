@@ -10,7 +10,8 @@
 import { OpenAICompatibleProvider } from "@om-code/providers";
 import { loadSettings } from "@om-code/storage";
 import { v7 } from "uuid";
-import { type CliResult, runCli } from "./cli.js";
+import { runCli } from "./cli.js";
+import type { CliResult } from "./types.js";
 
 const forwardInterrupt = () => process.stdin.emit("om-interrupt");
 process.on("SIGINT", forwardInterrupt);

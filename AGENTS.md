@@ -21,7 +21,8 @@ The pnpm workspace holds `cli`, `storage`, `protocol`, `session` (pure materiali
 
 - `pnpm install --frozen-lockfile` — reproduce pinned TypeScript dependencies.
 - `pnpm run check` — the full local gate: lint, typecheck, build, test, in that order.
-- `pnpm run lint` (Biome), and `pnpm -r --if-present run typecheck`, `test`, `build` — the individual gates; required packages must define these scripts.
+- `pnpm run lint` (`biome check .` plus `pnpm run lint:deps`), and `pnpm -r --if-present run typecheck`, `test`, `build` — the individual gates; required packages must define these scripts.
+- `pnpm run lint:deps` — dependency-cruiser layering graph (AC-14.4): protocol leaf, session→protocol, kernel→protocol/session, adapters never cross or touch cli, nothing touches cli, no cycles. Workspace imports resolve to `src` via `tsconfig.depcruise.json` (never extend it from a package), so it needs no build first; `dist/` is excluded.
 - `pnpm --filter @om-code/tests test` — shared provider contracts, boundary checks, and journal integration; build first when running individual suites.
 - `node tests/manual/transport-close.mjs` — explicit loopback socket-close verification, outside the default socket-free suite.
 - `node tests/manual/journal-demo.mjs` — explicit native-lock/SIGKILL/repair and file-permission demonstration using temporary state.
@@ -70,6 +71,8 @@ Journal append assigns identity/sequence and fsyncs every record before resolvin
 Model ports and `ProviderError` live in protocol. Providers and session depend on protocol only; storage does not re-export materialization. `assistant_message` v2 preserves raw tool calls and a typed complete/interrupted outcome; v1 stays readable. Local errors do not occupy `stop_reason`. Callers journal terminal responses and error partials; adapters perform no journal I/O or tool execution.
 
 All workspace reads, searches, writes, and command execution route through `packages/stub-client` to the sandboxed stub. Trusted host application-state reads/writes belong to `packages/storage` and are limited to application-owned configuration, journals, locks, and backups. Do not misapply the workspace I/O rule to force journal storage inside the sandbox. Host launch/setup effects are confined to reviewed boundary integration modules; document any sandbox dependency that performs them internally.
+
+Biome's `noRestrictedImports` bans `node:fs`, `fs`, `node:fs/promises`, `fs/promises`, `node:child_process`, `child_process`, `node:module` and `node:os` outside `packages/storage`, `packages/stub-client` and `native/`; tests, configs, scripts and `.mjs` are exempt. `packages/cli/src/types.ts` holds the shared CLI seams (`CliDeps`, `CliIo`, `CliResult`, `ConfigLoader`) so the composition root's import graph stays acyclic — import them from `./types.js`, never from `./cli.js`.
 
 ## Testing Guidelines
 

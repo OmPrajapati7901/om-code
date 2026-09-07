@@ -14,12 +14,14 @@
     "pretypecheck": "pnpm run build",
     "typecheck": "pnpm -r --if-present run typecheck",
     "test": "pnpm -r --if-present run test",
-    "lint": "biome check .",
+    "lint": "biome check . && pnpm run lint:deps",
+    "lint:deps": "depcruise --config .dependency-cruiser.cjs --exclude \"dist\" packages tests",
     "lint:fix": "biome check --write .",
     "check": "pnpm run lint && pnpm run typecheck && pnpm run build && pnpm run test"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.12",
+    "dependency-cruiser": "18.2.0",
     "typescript": "5.9.3"
   }
 }
