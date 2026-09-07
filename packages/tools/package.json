@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Tool interface, registry and roster; execute reaches the stub through a structural port (LRN-16)",
+  "description": "Tool contracts, registry, and read-only repository exploration through the stub port",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=24"

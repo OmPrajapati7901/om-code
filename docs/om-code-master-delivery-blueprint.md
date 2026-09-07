@@ -396,7 +396,9 @@ and `--max-turns` plus the wall-clock cap remain the effective budget. Do not si
 ### 8.2 Stub RPC
 
 JSON-RPC 2.0 over stdio. Every request carries `{maxBytes, maxMs, cwd, envAllowlist, capability}`;
-every response ends `{status, bytes, truncated, elapsedMs}`.
+every response ends `{status, bytes, truncated, elapsedMs}`. Method-specific terminal frames may extend
+that shared frame: `exec` adds `exitCode`/`signal`, and `read` adds `totalLines` (or `null` when its
+time budget prevents counting to EOF).
 
 | Method | Purpose |
 |---|---|

@@ -7,7 +7,18 @@
 import type { ModelTool } from "@om-code/protocol";
 import { expect, it } from "vitest";
 import { z } from "zod";
-import { type Tool, type ToolDescriptor, toModelTool } from "../src/index.js";
+import {
+  createGlobTool,
+  createGrepTool,
+  createReadTool,
+  createRegistry,
+  globInputSchema,
+  grepInputSchema,
+  readInputSchema,
+  type Tool,
+  type ToolDescriptor,
+  toModelTool,
+} from "../src/index.js";
 import { fakeCapability, fakeEnd } from "./fixtures.js";
 
 const inputSchema = z.object({ path: z.string(), limit: z.number().optional() }).strict();
@@ -57,4 +68,21 @@ it("toModelTool reaches the prompt shape without translation", () => {
   expect(modelTool.name).toBe("read");
   expect(modelTool.description).toBe("fake read tool");
   expect(modelTool.parameters).toEqual(tool.descriptor().parameters);
+});
+
+it("real tool descriptors come from their runtime Zod schemas", () => {
+  for (const [tool, schema] of [
+    [createReadTool(), readInputSchema],
+    [createGrepTool(), grepInputSchema],
+    [createGlobTool(), globInputSchema],
+  ] as const) {
+    expect(tool.descriptor().parameters).toEqual(z.toJSONSchema(schema));
+    const emitted = tool.descriptor().parameters as EmittedSchema;
+    expect(Object.keys(emitted.properties ?? {}).sort()).toEqual(Object.keys(schema.shape).sort());
+  }
+});
+
+it("the registry accepts all three real read-only tools", () => {
+  const registry = createRegistry([createReadTool(), createGrepTool(), createGlobTool()]);
+  expect(registry.descriptors().map(({ name }) => name)).toEqual(["read", "grep", "glob"]);
 });

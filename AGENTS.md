@@ -17,7 +17,7 @@ After every change, assess whether it introduces durable context that other agen
 
 ## Build, Test, and Development Commands
 
-The pnpm workspace holds `cli`, `storage`, `protocol`, `session` (pure materialization), `providers` (Chat Completions), `kernel` (system prompt assembly and the turn loop), `stub-client` (the stub port plus the local-ts driver behind it), `tools` (the `Tool` interface, registry and seven-name roster; no actual tools yet), and a private root `tests/` workspace for shared contracts and integration. Do not claim a gate passed without running it.
+The pnpm workspace holds `cli`, `storage`, `protocol`, `session` (pure materialization), `providers` (Chat Completions), `kernel` (system prompt assembly and the turn loop), `stub-client` (the stub port plus the local-ts driver behind it), `tools` (the `Tool` interface, registry, seven-name roster, and `read`/`grep`/`glob` implementations), and a private root `tests/` workspace for shared contracts and integration. Do not claim a gate passed without running it.
 
 - `pnpm install --frozen-lockfile` — reproduce pinned TypeScript dependencies.
 - `pnpm run check` — the full local gate: lint, typecheck, build, test, in that order.
@@ -75,7 +75,7 @@ All workspace reads, searches, writes, and command execution route through `pack
 
 Biome's `noRestrictedImports` bans `node:fs`, `fs`, `node:fs/promises`, `fs/promises`, `node:child_process`, `child_process`, `node:module` and `node:os` outside `packages/storage`, `packages/stub-client` and `native/`; tests, configs, scripts and `.mjs` are exempt. `packages/cli/src/types.ts` holds the shared CLI seams (`CliDeps`, `CliIo`, `CliResult`, `ConfigLoader`) so the composition root's import graph stays acyclic — import them from `./types.js`, never from `./cli.js`.
 
-`packages/tools` owns the `Tool`/`ToolDescriptor`/`ToolContext`/`ToolEvent` shapes and the seven-name roster, depends on `protocol` and `zod` only, and is deliberately absent from Biome's `noRestrictedImports` override — that omission enforces AC-16.2. It reaches the stub through its own structural `ToolIo` port that `StubClient` satisfies without importing it, the same relationship kernel's `JournalSink` has with storage; `tests/tool-io-contract.test.ts` is the drift pin.
+`packages/tools` owns the `Tool`/`ToolDescriptor`/`ToolContext`/`ToolEvent` shapes, the seven-name roster, and the `read`/`grep`/`glob` tools; it depends on `protocol` and `zod` only and is deliberately absent from Biome's `noRestrictedImports` override — that omission enforces AC-16.2. It reaches the stub through its own structural `ToolIo` port that `StubClient` satisfies without importing it, the same relationship kernel's `JournalSink` has with storage; `tests/tool-io-contract.test.ts` is the drift pin. Binary detection happens once in the read tool above the port, leaving drivers as byte pipes.
 
 ## Testing Guidelines
 
