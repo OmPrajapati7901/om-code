@@ -432,6 +432,10 @@ describe("disconnect/cancellation (AC-7.7, 7.8)", () => {
   });
   it("aborts retry backoff without another transport request", async () => {
     vi.useFakeTimers();
+    // Pin the randomized delay above the 100 ms pre-abort advance. Without
+    // this, Math.random() < 0.2 legitimately starts a second attempt and
+    // makes the cancellation test probabilistic under workspace load.
+    vi.spyOn(Math, "random").mockReturnValue(1);
     const controller = new AbortController();
     const fetchImpl = vi
       .fn<typeof fetch>()

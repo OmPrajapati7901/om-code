@@ -27,10 +27,12 @@ The pnpm workspace holds `cli`, `storage`, `protocol`, `session` (pure materiali
 - `node tests/manual/journal-demo.mjs` — explicit native-lock/SIGKILL/repair and file-permission demonstration using temporary state.
 - `node --env-file=.env tests/manual/provider-smoke.mjs` — explicit paid text/tool smoke, capped at 512 completion tokens per request; never part of `pnpm test`.
 - `node --env-file=.env tests/manual/record-fixture.mjs <name>` — explicit paid capture that writes credential-stripped fixtures via `recordingFetch`; never part of `pnpm test`.
+- `om run` — interactive multi-turn REPL; `om run -p "<prompt>"` is one-shot, `--json` emits schema-valid journal records as NDJSON, and `--max-turns` is the interim CLI cap until LRN-19 absorbs it.
+- `om sessions` and `om show <id>` — list project-scoped journal sessions and render one without inference.
 - `pretypecheck` builds the workspace first, so a package typechecks against the built declarations of the workspace packages it imports (rather than their sources).
 - `pnpm add --global ./packages/cli` — put `om` on your PATH. `pnpm link --global` was removed in pnpm 11, and `~/Library/pnpm/bin` must be on PATH first (`pnpm setup`).
 
-There is no `pnpm dev` yet: no long-running development workflow exists until `om run` lands in LRN-11.
+There is no `pnpm dev`: `om run` is the product REPL, not a development server.
 
 `fs-native-extensions@1.5.0` is the sole early native runtime dependency, confined to storage for nonblocking macOS BSD advisory locks. Its packaged native addon loads without adding a Cargo workspace. Keep its lock inode permanent; never unlink it or replace it during journal repair.
 
@@ -56,6 +58,8 @@ Keep provider-specific logic and SDK types out of `packages/kernel`. `packages/p
 `packages/kernel` is the only module that builds a system prompt (`role: "system"` message) or assembles a `ModelRequest`; nothing else appends to it (LR-FR-037). Assembly is a pure function of a `SessionView`, resolved config, and a caller-supplied environment/instruction-file snapshot — no clock or filesystem read inside it, so the same input always produces the same request. Instruction-file content enters by reference to its content hash via the `prompt` journal entry kind (protocol's eleventh, added in LRN-09; §7 of the blueprint only fixed ten).
 
 The kernel owns the typed turn state machine and its narrow `JournalSink` port; storage writers satisfy that port structurally, so kernel never imports storage. The loop awaits the authorizing journal append before prompt assembly, inference, and terminal delivery. Protocol has twelve entry kinds: provider and local turn failures use `error` (the twelfth), never `stop_reason` or an invented `StreamFailureKind`; an available provider partial remains an interrupted `assistant_message` v2.
+
+`packages/cli` is the composition root for kernel, providers, storage, and session. `runCli` is async and receives all process-adjacent dependencies through `CliDeps`: streams/output, environment/cwd/host, clock, UUIDv7 factory, settings loader, and provider factory; only `src/om.ts` touches `process`. After every turn the CLI re-reads and materializes the journal before the next prompt. Its journal-sink tee emits the exact appended records in `--json` mode; provisional text/thinking deltas are human-mode only. Storage owns `listSessions` so CLI source performs no direct filesystem I/O.
 
 Field naming: the journal is a wire format, so its fields are snake_case (`turn_id`, `call_id`, `risk_class`) to mirror the Rust DTOs in M4, where snake_case is idiomatic. TypeScript-internal state (LRN-04's config: `baseUrl`) stays camelCase.
 

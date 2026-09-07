@@ -25,6 +25,20 @@ type BoundarySpec = {
 
 const BOUNDARIES: readonly BoundarySpec[] = [
   {
+    name: "cli",
+    allowedDependencies: [
+      "@om-code/kernel",
+      "@om-code/protocol",
+      "@om-code/providers",
+      "@om-code/session",
+      "@om-code/storage",
+      "uuid",
+    ],
+    bannedDependencies: ["@om-code/sandbox", "@om-code/stub-client"],
+    bansAllNodeImports: false,
+    bansClockReads: false,
+  },
+  {
     name: "session",
     allowedDependencies: ["@om-code/protocol"],
     bannedDependencies: [],

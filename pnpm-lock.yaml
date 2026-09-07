@@ -17,9 +17,24 @@ importers:
 
   packages/cli:
     dependencies:
+      '@om-code/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@om-code/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@om-code/providers':
+        specifier: workspace:*
+        version: link:../providers
+      '@om-code/session':
+        specifier: workspace:*
+        version: link:../session
       '@om-code/storage':
         specifier: workspace:*
         version: link:../storage
+      uuid:
+        specifier: 14.0.2
+        version: 14.0.2
     devDependencies:
       '@types/node':
         specifier: 24.13.3

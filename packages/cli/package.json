@@ -20,7 +20,12 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@om-code/storage": "workspace:*"
+    "@om-code/kernel": "workspace:*",
+    "@om-code/protocol": "workspace:*",
+    "@om-code/providers": "workspace:*",
+    "@om-code/session": "workspace:*",
+    "@om-code/storage": "workspace:*",
+    "uuid": "14.0.2"
   },
   "devDependencies": {
     "@types/node": "24.13.3",

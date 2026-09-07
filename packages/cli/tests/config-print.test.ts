@@ -10,6 +10,7 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PassThrough } from "node:stream";
 import { loadSettings } from "@om-code/storage";
 import { describe, expect, it } from "vitest";
 import { type CliDeps, runCli } from "../src/cli.js";
@@ -17,7 +18,26 @@ import { type CliDeps, runCli } from "../src/cli.js";
 const HOST = { platform: "darwin", arch: "arm64" };
 
 function deps(env: Record<string, string | undefined>, cwd: string): CliDeps {
-  return { host: HOST, env, cwd, loadSettings: (options) => loadSettings(options) };
+  const stream = new PassThrough();
+  return {
+    host: HOST,
+    env,
+    cwd,
+    loadSettings: (options) => loadSettings(options),
+    io: {
+      write: () => {},
+      writeErr: () => {},
+      input: stream,
+      output: stream,
+      isTty: false,
+    },
+    now: () => new Date("2026-09-06T00:00:00Z"),
+    newId: () => "00000000-0000-7000-8000-000000000000",
+    createProvider: () => {
+      throw new Error("provider must not be created by config print");
+    },
+    osLabel: "darwin/arm64",
+  };
 }
 
 function makeHome(files: Record<string, unknown>): string {
@@ -40,14 +60,14 @@ function makeProject(files: Record<string, unknown>): string {
 }
 
 describe("AC-4.2 — config print shows each value with its source", () => {
-  it("renders values spread across user, project and flag tiers", () => {
+  it("renders values spread across user, project and flag tiers", async () => {
     const home = makeHome({
       "config.json": { baseUrl: "https://user.example.com/v1", model: "user-model" },
     });
     const project = makeProject({
       ".om-code/settings.json": { model: "project-model" },
     });
-    const result = runCli(
+    const result = await runCli(
       ["config", "print", "--effective", "--with-sources", "--credential", "env:OM_TEST_KEY"],
       deps({ OM_HOME: home }, project),
     );
@@ -65,14 +85,14 @@ describe("AC-4.2 — config print shows each value with its source", () => {
     expect(result.stdout).toContain("--credential");
   });
 
-  it("an env value overrides the project tier (AC-4.6 from the terminal)", () => {
+  it("an env value overrides the project tier (AC-4.6 from the terminal)", async () => {
     const home = makeHome({
       "config.json": { baseUrl: "https://user.example.com/v1", model: "user-model" },
     });
     const project = makeProject({
       ".om-code/settings.json": { model: "project-model" },
     });
-    const result = runCli(
+    const result = await runCli(
       ["config", "print", "--effective", "--with-sources"],
       deps({ OM_HOME: home, OM_MODEL: "env-model" }, project),
     );
@@ -81,12 +101,12 @@ describe("AC-4.2 — config print shows each value with its source", () => {
     expect(result.stdout).toContain("OM_MODEL");
   });
 
-  it("a --model flag overrides env", () => {
+  it("a --model flag overrides env", async () => {
     const home = makeHome({
       "config.json": { baseUrl: "https://user.example.com/v1", model: "user-model" },
     });
     const project = makeProject({});
-    const result = runCli(
+    const result = await runCli(
       ["config", "print", "--effective", "--with-sources", "--model", "flag-model"],
       deps({ OM_HOME: home, OM_MODEL: "env-model" }, project),
     );
@@ -95,7 +115,7 @@ describe("AC-4.2 — config print shows each value with its source", () => {
     expect(result.stdout).toContain("--model");
   });
 
-  it("the credential row marks resolved vs not-resolved and never prints the secret", () => {
+  it("the credential row marks resolved vs not-resolved and never prints the secret", async () => {
     const home = makeHome({
       "config.json": {
         baseUrl: "https://user.example.com/v1",
@@ -104,7 +124,7 @@ describe("AC-4.2 — config print shows each value with its source", () => {
       },
     });
     const project = makeProject({});
-    const resolved = runCli(
+    const resolved = await runCli(
       ["config", "print", "--effective", "--with-sources"],
       deps({ OM_HOME: home, OM_TEST_SECRET: "sk-live-sentinel" }, project),
     );
@@ -112,7 +132,7 @@ describe("AC-4.2 — config print shows each value with its source", () => {
     expect(resolved.stdout).toContain("(resolved)");
     expect(resolved.stdout).not.toContain("sk-live-sentinel");
 
-    const missing = runCli(
+    const missing = await runCli(
       ["config", "print", "--effective", "--with-sources"],
       deps({ OM_HOME: home }, project),
     );
@@ -122,10 +142,10 @@ describe("AC-4.2 — config print shows each value with its source", () => {
 });
 
 describe("AC-4.5 — empty config fails with remediation, not at inference", () => {
-  it("prints the table, writes remediation naming baseUrl and model, exits 1", () => {
+  it("prints the table, writes remediation naming baseUrl and model, exits 1", async () => {
     const home = mkdtempSync(join(tmpdir(), "om-empty-home-"));
     const project = makeProject({});
-    const result = runCli(
+    const result = await runCli(
       ["config", "print", "--effective", "--with-sources"],
       deps({ OM_HOME: home }, project),
     );
@@ -139,10 +159,10 @@ describe("AC-4.5 — empty config fails with remediation, not at inference", () 
 });
 
 describe("AC-4.4 — malformed config through the CLI", () => {
-  it("a broken user file exits 1 naming the file, with no stack trace", () => {
+  it("a broken user file exits 1 naming the file, with no stack trace", async () => {
     const home = makeHome({ "config.json": '{"baseUrl": ' });
     const project = makeProject({});
-    const result = runCli(
+    const result = await runCli(
       ["config", "print", "--effective", "--with-sources"],
       deps({ OM_HOME: home }, project),
     );
@@ -154,32 +174,32 @@ describe("AC-4.4 — malformed config through the CLI", () => {
 });
 
 describe("config argument errors", () => {
-  it("rejects unknown config subcommands with exit 1", () => {
-    const result = runCli(["config", "bogus"], deps({}, tmpdir()));
+  it("rejects unknown config subcommands with exit 1", async () => {
+    const result = await runCli(["config", "bogus"], deps({}, tmpdir()));
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain('unknown config subcommand "bogus"');
   });
 
-  it("requires a subcommand", () => {
-    const result = runCli(["config"], deps({}, tmpdir()));
+  it("requires a subcommand", async () => {
+    const result = await runCli(["config"], deps({}, tmpdir()));
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("subcommand");
   });
 
-  it("rejects unknown flags with exit 1", () => {
-    const result = runCli(["config", "print", "--bogus"], deps({}, tmpdir()));
+  it("rejects unknown flags with exit 1", async () => {
+    const result = await runCli(["config", "print", "--bogus"], deps({}, tmpdir()));
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain('unknown flag "--bogus"');
   });
 
-  it("rejects a value flag without a value", () => {
-    const result = runCli(["config", "print", "--model"], deps({}, tmpdir()));
+  it("rejects a value flag without a value", async () => {
+    const result = await runCli(["config", "print", "--model"], deps({}, tmpdir()));
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain('flag "--model" requires a value');
   });
 
-  it("an invalid flag value exits 1 naming the flag, with no stack", () => {
-    const result = runCli(["config", "print", "--base-url", "not-a-url"], deps({}, tmpdir()));
+  it("an invalid flag value exits 1 naming the flag, with no stack", async () => {
+    const result = await runCli(["config", "print", "--base-url", "not-a-url"], deps({}, tmpdir()));
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("--base-url");
     expect(result.stderr).not.toContain("\n    at ");
