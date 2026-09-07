@@ -85,12 +85,13 @@ function tsFiles(directory: string): string[] {
   );
 }
 
-it("exactly journal/files.ts and journal/writer.ts import write-capable fs APIs", () => {
+it("exactly journal/files.ts, journal/writer.ts and blobs/store.ts import write-capable fs APIs", () => {
   const src = join(root, "packages", "storage", "src");
   const writers = tsFiles(src)
     .filter((file) => importedNames(readFileSync(file, "utf8")).some((n) => WRITE_CAPABLE.has(n)))
     .map((file) => relative(root, file));
   expect(writers.sort()).toEqual([
+    join("packages", "storage", "src", "blobs", "store.ts"),
     join("packages", "storage", "src", "journal", "files.ts"),
     join("packages", "storage", "src", "journal", "writer.ts"),
   ]);

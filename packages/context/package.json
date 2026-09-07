@@ -1,0 +1,32 @@
+{
+  "name": "@om-code/context",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Central runtime bounding: result truncation with blob spill, and run budgets",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage --coverage.reporter=text"
+  },
+  "dependencies": {
+    "@om-code/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "@vitest/coverage-v8": "3.2.7",
+    "fast-check": "4.9.0",
+    "typescript": "5.9.3",
+    "vitest": "3.2.7"
+  }
+}

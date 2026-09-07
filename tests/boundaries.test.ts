@@ -35,6 +35,7 @@ const BOUNDARIES: readonly BoundarySpec[] = [
   {
     name: "cli",
     allowedDependencies: [
+      "@om-code/context",
       "@om-code/kernel",
       "@om-code/protocol",
       "@om-code/providers",
@@ -87,6 +88,20 @@ const BOUNDARIES: readonly BoundarySpec[] = [
       "@om-code/sandbox",
       "@om-code/providers",
       "@om-code/context",
+    ],
+    bansClockReads: false,
+  },
+  {
+    name: "context",
+    allowedDependencies: ["@om-code/protocol"],
+    bannedDependencies: [
+      "@om-code/kernel",
+      "@om-code/cli",
+      "@om-code/providers",
+      "@om-code/storage",
+      "@om-code/stub-client",
+      "@om-code/sandbox",
+      "@om-code/tools",
     ],
     bansClockReads: false,
   },
@@ -176,4 +191,30 @@ it("AC-7.5 model-name grep detects planted branches and scans production source 
   expect(branchesOnModel('if (typeof raw.model !== "string") throw Error();')).toBe(false);
   for (const file of files(join(root, "packages/providers/src")))
     expect(branchesOnModel(readFileSync(file, "utf8"))).toBe(false);
+});
+
+// AC-19.1: truncation happens in one runtime module (@om-code/context), never
+// in any tool. A grep signal following the branchesOnModel idiom: a named
+// predicate, planted positive and negative controls, then the scan.
+function truncatesPreview(line: string): boolean {
+  if (/\.\s*(slice|subarray)\s*\(\s*0\s*,/.test(line)) return true;
+  if (/\btruncated\s*=\s*true/.test(line)) return true;
+  if (/maxBytes/i.test(line) && /(>=|<=|>|<|===|!==|==)/.test(line)) return true;
+  return false;
+}
+it("AC-19.1 truncation grep detects planted truncation and scans packages/tools/src", () => {
+  expect(truncatesPreview("const preview = text.slice(0, ctx.budget.maxBytes);")).toBe(true);
+  expect(truncatesPreview("if (bytes > ctx.budget.maxBytes) truncated = true;")).toBe(true);
+  expect(truncatesPreview("maxBytes: ctx.budget.maxBytes,")).toBe(false);
+  for (const file of files(join(root, "packages/tools/src"))) {
+    for (const line of readFileSync(file, "utf8").split("\n")) {
+      // read.ts binary-sniff window: subarray bounds the NUL scan to the
+      // first 8 KiB, but the full buffer still reaches the decoder.
+      if (line.includes("BINARY_SCAN_BYTES - scanned")) continue;
+      // format.ts trailing-newline handling: drops the empty element after a
+      // trailing "\n", not content.
+      if (line.includes('.split("\\n").slice(0, -1)')) continue;
+      expect(truncatesPreview(line)).toBe(false);
+    }
+  }
 });

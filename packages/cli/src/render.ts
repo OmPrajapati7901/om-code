@@ -1,5 +1,6 @@
 import type { AssistantMessageV2 } from "@om-code/protocol";
 import type { SessionView } from "@om-code/session";
+import { blobFileForRef } from "@om-code/storage";
 
 export type SessionRow = {
   readonly id: string;
@@ -33,7 +34,7 @@ function assistantText(entry: AssistantMessageV2): string {
     .join("");
 }
 
-export function renderTranscript(sessionId: string, view: SessionView): string {
+export function renderTranscript(sessionId: string, view: SessionView, omHome: string): string {
   const lines = [`Session ${sessionId}`];
   for (const entry of view.conversation) {
     if (entry.kind === "user_message") {
@@ -50,6 +51,21 @@ export function renderTranscript(sessionId: string, view: SessionView): string {
     const suffix =
       entry.schemaVersion === 2 && entry.outcome.kind === "interrupted" ? " [interrupted]" : "";
     lines.push("", `Assistant${suffix}: ${text}`);
+  }
+  for (const result of view.toolResults) {
+    const firstLine = result.preview.split("\n", 1)[0] ?? "";
+    lines.push("", `Tool ${result.call_id} (${result.status}): ${firstLine}`);
+    if (result.blob_ref !== undefined) {
+      // Retrieval stays reachable from the product (AC-19.3): the path if
+      // the ref parses, the raw ref otherwise (old journals stay readable).
+      let location: string;
+      try {
+        location = blobFileForRef(omHome, result.blob_ref);
+      } catch {
+        location = result.blob_ref;
+      }
+      lines.push(`  full output: ${location}`);
+    }
   }
   for (const error of view.errors)
     lines.push("", `Error (${error.source}/${error.reason}): ${error.message}`);

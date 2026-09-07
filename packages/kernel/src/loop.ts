@@ -32,7 +32,14 @@ import {
   type ToolCall,
 } from "@om-code/protocol";
 import type { SessionView } from "@om-code/session";
-import type { JournalSink, ToolOutcome, ToolRunner } from "./ports.js";
+import type {
+  BudgetTrip,
+  BudgetTripReason,
+  JournalSink,
+  ToolOutcome,
+  ToolRunner,
+  TurnBudget,
+} from "./ports.js";
 import { assemblePrompt, type Environment, type InstructionFile, PromptError } from "./prompt.js";
 import type { StateOf, Transition, TurnState } from "./turn.js";
 
@@ -49,6 +56,8 @@ export type TurnInput = {
   readonly tools: readonly ModelTool[];
   /** Absent = no tool execution; M1 paths and `om show` stay honest. */
   readonly toolRunner?: ToolRunner | undefined;
+  /** Absent = unbounded; M1's tests stay honest. */
+  readonly budget?: TurnBudget | undefined;
 };
 
 export type TurnEvent =
@@ -59,7 +68,7 @@ export type TurnEvent =
   | { readonly type: "tool_result"; readonly call_id: string; readonly result: ToolOutcome }
   | {
       readonly type: "turn_end";
-      readonly state: StateOf<"completed" | "failed" | "interrupted">;
+      readonly state: StateOf<"completed" | "failed" | "interrupted" | "limited">;
     };
 
 class JournalCommitError {
@@ -75,6 +84,26 @@ function messageOf(error: unknown): string {
 
 function localReason(error: unknown): string {
   return error instanceof PromptError ? error.kind : "unexpected";
+}
+
+/**
+ * Exit-code mapping for budget trips: exhausted bounds are `limited`
+ * (exit 3); `max-cost-unknown-usage` is a startup-correction failure
+ * (exit 1), since cost was never knowable rather than exceeded.
+ */
+function isLimitReason(reason: BudgetTripReason): boolean {
+  return reason === "max-turns" || reason === "wall-clock" || reason === "max-cost";
+}
+
+function tripError(trip: BudgetTrip): ErrorEntry {
+  return {
+    kind: "error",
+    schemaVersion: 1,
+    source: "local",
+    reason: trip.reason,
+    message: trip.message,
+    retryable: false,
+  };
 }
 
 function isRetryable(error: ProviderError): boolean {
@@ -135,6 +164,35 @@ export async function* runTurn(input: TurnInput): AsyncIterable<TurnEvent> {
       throw new Error("session metadata is required; append session_start before running a turn");
     }
     for (;;) {
+      const preTrip = input.budget?.check();
+      if (preTrip !== undefined) {
+        const error = tripError(preTrip);
+        await append(error, { by: "system", turn_id: turnId });
+        await append(
+          { kind: "turn_end", schemaVersion: 1, usage: { kind: "unknown" } },
+          { by: "system", turn_id: turnId },
+        );
+        if (isLimitReason(preTrip.reason)) {
+          const limit: Transition<"building_context", "limited"> = () => ({
+            phase: "limited",
+            turnId,
+            error,
+          });
+          const limited = limit(building);
+          yield { type: "state", state: limited };
+          yield { type: "turn_end", state: limited };
+        } else {
+          const fail: Transition<"building_context", "failed"> = () => ({
+            phase: "failed",
+            turnId,
+            error,
+          });
+          const failed = fail(building);
+          yield { type: "state", state: failed };
+          yield { type: "turn_end", state: failed };
+        }
+        return;
+      }
       const prompt = assemblePrompt({
         session: view,
         model: input.model,
@@ -191,6 +249,39 @@ export async function* runTurn(input: TurnInput): AsyncIterable<TurnEvent> {
         ...view,
         conversation: [...view.conversation, { ...assistantEntry }],
       };
+
+      // The inference is journaled before the budget verdict: the spend
+      // happened, and the journal stays reconstructable (AC-10.3). The trip
+      // stops every further inference and tool execution instead.
+      const postTrip = input.budget?.recordInference(response.usage);
+      if (postTrip !== undefined) {
+        const error = tripError(postTrip);
+        await append(error, { by: "system", turn_id: turnId });
+        await append(
+          { kind: "turn_end", schemaVersion: 1, usage: { kind: "unknown" } },
+          { by: "system", turn_id: turnId },
+        );
+        if (isLimitReason(postTrip.reason)) {
+          const limit: Transition<"streaming_model", "limited"> = () => ({
+            phase: "limited",
+            turnId,
+            error,
+          });
+          const limited = limit(streaming);
+          yield { type: "state", state: limited };
+          yield { type: "turn_end", state: limited };
+        } else {
+          const fail: Transition<"streaming_model", "failed"> = () => ({
+            phase: "failed",
+            turnId,
+            error,
+          });
+          const failed = fail(streaming);
+          yield { type: "state", state: failed };
+          yield { type: "turn_end", state: failed };
+        }
+        return;
+      }
 
       const calls =
         response.outcome.kind === "complete" ? (response.tool_calls as CompleteToolCall[]) : [];

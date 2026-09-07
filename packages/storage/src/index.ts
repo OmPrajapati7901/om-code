@@ -5,6 +5,14 @@
  * wire authority (AGENTS.md), and a local config file is not a wire contract.
  */
 
+export {
+  type BlobLocation,
+  blobFileForRef,
+  createBlobStore,
+  putBlob,
+  readBlob,
+  resolveBlobHome,
+} from "./blobs/store.js";
 export { type KeychainRunner, resolveCredentialSecret } from "./config/credential.js";
 export { ConfigError, isConfigError } from "./config/errors.js";
 export {

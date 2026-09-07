@@ -1,19 +1,27 @@
 /**
- * The settings declaration registry (LRN-04).
+ * The settings declaration registry (LRN-04, extended in LRN-19).
  *
  * Settings are declared once, as records of (key, envVar, flag, parse,
  * describe, required, default). The loader, the CLI flag parser and the
  * config-print renderer all iterate this registry, so adding a setting later
  * is one entry, not four edits.
  *
- * Keep it small: baseUrl, model, credential. Turn/cost caps arrive with the
- * kernel; nothing else is added here.
+ * Turn/cost caps arrived with the kernel (LRN-19): maxWallClockMs and the
+ * pricing pair are env+file only — they have no `flag`, so `flag` is
+ * optional. Their numeric defaults live in `@om-code/context` (the bounding
+ * authority); storage carries no default for them.
  */
 
 import { inspect } from "node:util";
 import { invalidValue } from "./errors.js";
 
-export type SettingKey = "baseUrl" | "model" | "credential";
+export type SettingKey =
+  | "baseUrl"
+  | "model"
+  | "credential"
+  | "maxWallClockMs"
+  | "pricingInputPerMTok"
+  | "pricingOutputPerMTok";
 
 export type ConfigFlags = {
   readonly baseUrl?: string;
@@ -82,10 +90,27 @@ export function parseModel(raw: string, source: string): string {
   return raw;
 }
 
+export function parseWallClockMs(raw: string, source: string): string {
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw invalidValue(source, "maxWallClockMs", "a positive integer of milliseconds");
+  }
+  return raw;
+}
+
+export function parsePrice(raw: string, source: string, key: SettingKey): string {
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0) {
+    throw invalidValue(source, key, "a non-negative number (USD per million tokens)");
+  }
+  return raw;
+}
+
 export type SettingDefinition = {
   readonly key: SettingKey;
   readonly envVar: string;
-  readonly flag: string;
+  /** Absent for env+file-only settings (LRN-19 caps): no CLI flag sets them. */
+  readonly flag?: string;
   readonly required: boolean;
   readonly description: string;
   readonly default?: string;
@@ -123,6 +148,27 @@ export const SETTINGS: readonly SettingDefinition[] = [
     description: 'credential reference ("env:<VAR>" or "keychain:<service>/<account>")',
     default: "env:OM_API_KEY",
     parse: parseCredentialAsString,
+  },
+  {
+    key: "maxWallClockMs",
+    envVar: "OM_MAX_WALL_CLOCK_MS",
+    required: false,
+    description: "wall-clock budget per agent run in milliseconds (positive integer)",
+    parse: parseWallClockMs,
+  },
+  {
+    key: "pricingInputPerMTok",
+    envVar: "OM_PRICING_INPUT_PER_MTOK",
+    required: false,
+    description: "USD per million input tokens (non-negative number)",
+    parse: (raw, source) => parsePrice(raw, source, "pricingInputPerMTok"),
+  },
+  {
+    key: "pricingOutputPerMTok",
+    envVar: "OM_PRICING_OUTPUT_PER_MTOK",
+    required: false,
+    description: "USD per million output tokens (non-negative number)",
+    parse: (raw, source) => parsePrice(raw, source, "pricingOutputPerMTok"),
   },
 ];
 

@@ -18,6 +18,9 @@ const tierFileSchema = z
     baseUrl: z.string().optional(),
     model: z.string().optional(),
     credential: z.string().optional(),
+    maxWallClockMs: z.string().optional(),
+    pricingInputPerMTok: z.string().optional(),
+    pricingOutputPerMTok: z.string().optional(),
   })
   .strict();
 
@@ -25,6 +28,9 @@ export type TierDocument = {
   readonly baseUrl?: string | undefined;
   readonly model?: string | undefined;
   readonly credential?: string | undefined;
+  readonly maxWallClockMs?: string | undefined;
+  readonly pricingInputPerMTok?: string | undefined;
+  readonly pricingOutputPerMTok?: string | undefined;
 };
 
 export type FileReader = (path: string, encoding: "utf8") => string;
@@ -87,7 +93,11 @@ export function parseTierDocument(path: string, text: string): TierDocument {
   if (!result.success) {
     const issue = result.error.issues[0];
     if (issue === undefined) {
-      throw invalidField(path, "(root)", "a JSON object with optional baseUrl, model, credential");
+      throw invalidField(
+        path,
+        "(root)",
+        "a JSON object with optional baseUrl, model, credential, maxWallClockMs, pricingInputPerMTok, pricingOutputPerMTok",
+      );
     }
     throw invalidField(path, zodFieldPath(issue), zodExpected(issue));
   }

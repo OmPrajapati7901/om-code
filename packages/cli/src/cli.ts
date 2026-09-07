@@ -25,8 +25,9 @@ const PLANNED_COMMANDS: ReadonlyMap<string, string> = new Map([["resume", "LRN-2
 const HELP = `om — a learning coding agent (macOS arm64)
 
 Usage:
-  om run [-p <prompt>] [--mode read_only|manual] [--max-turns N] [--json]
-                        start a conversation or run one prompt
+  om run [-p <prompt>] [--mode read_only|manual] [--max-turns N] [--max-cost USD]
+                         [--notrunc] [--json]
+                         start a conversation or run one prompt
   om sessions           list this project's sessions
   om show <id>           render a journaled session without inference
   om config print --effective --with-sources

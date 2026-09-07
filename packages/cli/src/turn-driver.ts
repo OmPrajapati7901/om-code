@@ -1,4 +1,10 @@
-import { type Environment, type JournalSink, runTurn, type ToolRunner } from "@om-code/kernel";
+import {
+  type Environment,
+  type JournalSink,
+  runTurn,
+  type ToolRunner,
+  type TurnBudget,
+} from "@om-code/kernel";
 import type { ModelProvider, ModelTool } from "@om-code/protocol";
 import type { SessionView } from "@om-code/session";
 import { EXIT, type ExitCode } from "./exit.js";
@@ -7,7 +13,7 @@ import type { CliIo } from "./types.js";
 
 export type DrivenTurn = {
   readonly exitCode: ExitCode;
-  readonly phase: "completed" | "failed" | "interrupted";
+  readonly phase: "completed" | "failed" | "interrupted" | "limited";
 };
 
 export type DriveTurnInput = {
@@ -23,6 +29,7 @@ export type DriveTurnInput = {
   readonly json: boolean;
   readonly modelTools?: readonly ModelTool[];
   readonly toolRunner?: ToolRunner | undefined;
+  readonly budget?: TurnBudget | undefined;
 };
 
 export async function driveTurn(input: DriveTurnInput): Promise<DrivenTurn> {
@@ -40,6 +47,7 @@ export async function driveTurn(input: DriveTurnInput): Promise<DrivenTurn> {
     instructions: [],
     tools: input.modelTools ?? [],
     toolRunner: input.toolRunner,
+    budget: input.budget,
   })) {
     if (event.type === "text_delta" && !input.json) {
       input.io.write(event.text);
@@ -66,6 +74,9 @@ export async function driveTurn(input: DriveTurnInput): Promise<DrivenTurn> {
         terminal = { exitCode: EXIT.error, phase: "failed" };
       } else if (event.state.phase === "interrupted") {
         terminal = { exitCode: EXIT.error, phase: "interrupted" };
+      } else if (event.state.phase === "limited") {
+        input.io.writeErr(prefixedError(event.state.error.message));
+        terminal = { exitCode: EXIT.limit, phase: "limited" };
       } else {
         terminal = { exitCode: EXIT.ok, phase: "completed" };
       }

@@ -11,7 +11,7 @@
  */
 
 import { type KeychainRunner, resolveCredentialSecret } from "./credential.js";
-import { incompleteConfig } from "./errors.js";
+import { incompleteConfig, invalidValue } from "./errors.js";
 import { resolveConfigPaths } from "./paths.js";
 import { type FileReader, readTierFile } from "./read.js";
 import { type ResolvedSettings, resolveSettings } from "./resolve.js";
@@ -30,6 +30,10 @@ export type RuntimeSettings = {
   readonly model: string;
   readonly credential: CredentialSecret;
   readonly credentialReference: string;
+  /** Milliseconds per agent run; `undefined` selects context's default. */
+  readonly maxWallClockMs: number | undefined;
+  /** Both halves or neither; a half-configured pair is a config error. */
+  readonly pricing: { readonly inputPerMTok: number; readonly outputPerMTok: number } | undefined;
 };
 
 export function loadSettings(options: LoadSettingsOptions = {}): ResolvedSettings {
@@ -69,10 +73,29 @@ export function requireComplete(
   }
   const baseUrl = resolved.baseUrl.value as string;
   const model = resolved.model.value as string;
+  const maxWallClockMs =
+    resolved.maxWallClockMs.value === undefined ? undefined : Number(resolved.maxWallClockMs.value);
+  const inputPrice = resolved.pricingInputPerMTok.value;
+  const outputPrice = resolved.pricingOutputPerMTok.value;
+  if ((inputPrice === undefined) !== (outputPrice === undefined)) {
+    const missing = inputPrice === undefined ? "pricingInputPerMTok" : "pricingOutputPerMTok";
+    const present =
+      inputPrice === undefined ? resolved.pricingOutputPerMTok : resolved.pricingInputPerMTok;
+    throw invalidValue(
+      present.origin,
+      missing,
+      "both pricingInputPerMTok and pricingOutputPerMTok together (a half-configured pair cannot price usage)",
+    );
+  }
   return {
     baseUrl,
     model,
     credential: resolved.credential.secret,
     credentialReference: resolved.credential.value as string,
+    maxWallClockMs,
+    pricing:
+      inputPrice === undefined || outputPrice === undefined
+        ? undefined
+        : { inputPerMTok: Number(inputPrice), outputPerMTok: Number(outputPrice) },
   };
 }

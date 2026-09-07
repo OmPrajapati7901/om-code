@@ -1,5 +1,4 @@
 import { createInterface } from "node:readline/promises";
-import type { ErrorEntry } from "@om-code/protocol";
 import { EXIT, type ExitCode } from "./exit.js";
 import { prefixedError } from "./render.js";
 import type { DrivenTurn } from "./turn-driver.js";
@@ -7,9 +6,7 @@ import type { CliIo } from "./types.js";
 
 export type ReplInput = {
   readonly io: CliIo;
-  readonly maxTurns: number | undefined;
   readonly runTurn: (text: string, signal: AbortSignal) => Promise<DrivenTurn>;
-  readonly appendLimit: (entry: ErrorEntry) => Promise<void>;
 };
 
 export async function runRepl(input: ReplInput): Promise<ExitCode> {
@@ -19,7 +16,6 @@ export async function runRepl(input: ReplInput): Promise<ExitCode> {
     terminal: input.io.isTty,
   });
   let active: AbortController | undefined;
-  let turns = 0;
   const onInterrupt = () => {
     active?.abort();
   };
@@ -40,31 +36,19 @@ export async function runRepl(input: ReplInput): Promise<ExitCode> {
         if (input.io.isTty) input.io.write("> ");
         continue;
       }
-      if (input.maxTurns !== undefined && turns >= input.maxTurns) {
-        const message = `maximum turn limit (${input.maxTurns}) reached`;
-        await input.appendLimit({
-          kind: "error",
-          schemaVersion: 1,
-          source: "local",
-          reason: "max-turns",
-          message,
-          retryable: false,
-        });
-        input.io.writeErr(prefixedError(message));
-        return EXIT.limit;
-      }
 
       active = new AbortController();
       input.io.input.resume();
       const result = await input.runTurn(line, active.signal);
       active = undefined;
-      turns += 1;
       if (result.phase === "interrupted") {
         input.io.writeErr(prefixedError("turn interrupted; session kept"));
       }
       // A provider failure is terminal for the run; an interrupted turn is
-      // explicitly recoverable in this same REPL.
+      // explicitly recoverable in this same REPL. A tripped budget ends the
+      // run with the limit exit so the cap stays observable (AC-19.5).
       if (result.phase === "failed") return EXIT.error;
+      if (result.phase === "limited") return EXIT.limit;
       if (input.io.isTty) input.io.write("> ");
     }
     return EXIT.ok;

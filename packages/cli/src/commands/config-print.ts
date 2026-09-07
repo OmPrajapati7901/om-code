@@ -1,41 +1,43 @@
 /**
- * `om config print` (LRN-04, AC-4.2/AC-4.3).
+ * `om config print` (LRN-04, AC-4.2/AC-4.3; cap rows added in LRN-19).
  *
  * Renders an aligned three-column table (key, value, source). The credential
  * row prints the reference and a resolved/not-resolved marker — never the
- * secret.
+ * secret. Unset optional caps render as `(missing)`; their effective defaults
+ * live in `@om-code/context` (the bounding authority), not here.
  */
 
-import type { ResolvedSettings } from "@om-code/storage";
+import type { ResolvedSettings, SettingKey } from "@om-code/storage";
 
-function displayValueFor(key: string, resolved: ResolvedSettings): string {
-  if (key === "baseUrl") {
-    return resolved.baseUrl.value ?? "(missing)";
+const ROW_KEYS: readonly SettingKey[] = [
+  "baseUrl",
+  "model",
+  "credential",
+  "maxWallClockMs",
+  "pricingInputPerMTok",
+  "pricingOutputPerMTok",
+];
+
+function displayValueFor(key: SettingKey, resolved: ResolvedSettings): string {
+  if (key === "credential") {
+    const ref = resolved.credential.value ?? "(missing)";
+    const marker = resolved.credential.secret.resolved ? "(resolved)" : "(not-resolved)";
+    return `${ref} ${marker}`;
   }
-  if (key === "model") {
-    return resolved.model.value ?? "(missing)";
-  }
-  const ref = resolved.credential.value ?? "(missing)";
-  const marker = resolved.credential.secret.resolved ? "(resolved)" : "(not-resolved)";
-  return `${ref} ${marker}`;
+  return resolved[key].value ?? "(missing)";
 }
 
-function sourceFor(key: string, resolved: ResolvedSettings): string {
-  if (key === "baseUrl") {
-    return resolved.baseUrl.origin;
-  }
-  if (key === "model") {
-    return resolved.model.origin;
-  }
-  return resolved.credential.origin;
+function sourceFor(key: SettingKey, resolved: ResolvedSettings): string {
+  if (key === "credential") return resolved.credential.origin;
+  return resolved[key].origin;
 }
 
 export function renderConfigTable(resolved: ResolvedSettings): string {
-  const rows: Array<[string, string, string]> = [
-    ["baseUrl", displayValueFor("baseUrl", resolved), sourceFor("baseUrl", resolved)],
-    ["model", displayValueFor("model", resolved), sourceFor("model", resolved)],
-    ["credential", displayValueFor("credential", resolved), sourceFor("credential", resolved)],
-  ];
+  const rows: Array<[string, string, string]> = ROW_KEYS.map((key) => [
+    key,
+    displayValueFor(key, resolved),
+    sourceFor(key, resolved),
+  ]);
   const keyWidth = Math.max("key".length, ...rows.map(([key]) => key.length));
   const valueWidth = Math.max("value".length, ...rows.map(([, value]) => value.length));
   const sourceWidth = Math.max("source".length, ...rows.map(([, , source]) => source.length));

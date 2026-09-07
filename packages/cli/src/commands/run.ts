@@ -1,7 +1,15 @@
+import {
+  createBounder,
+  createRunBudget,
+  DEFAULT_MAX_WALL_CLOCK_MS,
+  DEFAULT_RESULT_BYTES,
+  DEFAULT_TOOL_BUDGET,
+} from "@om-code/context";
 import type { SessionMode } from "@om-code/protocol";
 import { materialize, type SessionView } from "@om-code/session";
 import {
   type ConfigFlags,
+  createBlobStore,
   findProjectRoot,
   JournalReader,
   requireComplete,
@@ -21,6 +29,7 @@ const FLAGS: readonly FlagDefinition[] = [
   { name: "prompt", short: "p", takesValue: true },
   { name: "max-turns", takesValue: true },
   { name: "max-cost", takesValue: true },
+  { name: "notrunc", takesValue: false },
   { name: "mode", takesValue: true },
   { name: "json", takesValue: false },
   { name: "base-url", takesValue: true },
@@ -33,6 +42,15 @@ function parsePositiveInteger(raw: string | undefined, flag: string): number | u
   const value = Number(raw);
   if (!Number.isSafeInteger(value) || value <= 0) {
     throw new Error(`${flag} must be a positive integer`);
+  }
+  return value;
+}
+
+function parseNonNegativeMoney(raw: string | undefined, flag: string): number | undefined {
+  if (raw === undefined) return undefined;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(`${flag} must be a non-negative number (USD)`);
   }
   return value;
 }
@@ -57,11 +75,24 @@ export async function runCommand(argv: readonly string[], deps: CliDeps): Promis
     ...(credential === undefined ? {} : { credential }),
   };
   const settings = requireComplete(deps.loadSettings({ env: deps.env, cwd: deps.cwd, flags }));
-  if (stringFlag(parsed, "max-cost") !== undefined) {
-    throw new Error("--max-cost cannot be enforced: pricing is unconfigured for the active model");
+  // Blueprint §8.1 correction: startup rejects missing pricing — an endpoint
+  // that reports no usage is unknowable before the first call, so that half
+  // aborts mid-run (reason "max-cost-unknown-usage", exit 1) instead.
+  const maxCostUsd = parseNonNegativeMoney(stringFlag(parsed, "max-cost"), "--max-cost");
+  if (maxCostUsd !== undefined && settings.pricing === undefined) {
+    throw new Error(
+      "--max-cost cannot be enforced: pricing is unconfigured for the active model " +
+        "(set OM_PRICING_INPUT_PER_MTOK and OM_PRICING_OUTPUT_PER_MTOK)",
+    );
   }
   const mode = parseMode(stringFlag(parsed, "mode"));
+  // Agent iterations: model inferences within one user request (LRN-19). The
+  // old REPL user-line cap is gone; the kernel budget owns this number now.
   const maxTurns = parsePositiveInteger(stringFlag(parsed, "max-turns"), "--max-turns");
+  const notrunc = booleanFlag(parsed, "notrunc");
+  if (notrunc) {
+    deps.io.writeErr("om: --notrunc disables result truncation for this run\n");
+  }
   const json = booleanFlag(parsed, "json");
   const provider = deps.createProvider(settings);
   const startedAt = deps.now();
@@ -86,20 +117,33 @@ export async function runCommand(argv: readonly string[], deps: CliDeps): Promis
     onRecord: emitRecord,
   });
   let view: SessionView = bootstrapped.view;
-  // LRN-19 takes ownership of these numbers; the interim budget below only
-  // lets LRN-18's tools run behind the same envelope the stub enforces.
-  const INTERIM_BUDGET = { maxBytes: 64 * 1024, maxMs: 30_000 };
   const stub = createLocalDriver({ root: location.projectRoot });
   const registry = createRegistry(readOnlyTools());
+  const bounder = createBounder({
+    blobs: createBlobStore({ omHome: location.omHome }),
+    maxResultBytes: DEFAULT_RESULT_BYTES,
+  });
   const toolRunner = createToolRunner({
     registry,
     io: stub,
     cwd: deps.cwd,
     envAllowlist: [],
-    budget: INTERIM_BUDGET,
+    budget: { ...DEFAULT_TOOL_BUDGET },
+    bounder,
+    ...(notrunc ? { notrunc: true as const } : {}),
   });
   const modelTools = registry.descriptors().map(toModelTool);
+  const maxWallClockMs = settings.maxWallClockMs ?? DEFAULT_MAX_WALL_CLOCK_MS;
   const runOne = async (text: string, signal: AbortSignal) => {
+    // Fresh budget per user request: each agent run gets its own turn,
+    // wall-clock and cost envelope.
+    const budget = createRunBudget({
+      maxTurns,
+      maxWallClockMs,
+      maxCostUsd,
+      pricing: settings.pricing,
+      now: () => Date.now(),
+    });
     const result = await driveTurn({
       session: view,
       text,
@@ -113,6 +157,7 @@ export async function runCommand(argv: readonly string[], deps: CliDeps): Promis
       json,
       modelTools,
       toolRunner,
+      budget,
     });
     view = materialize((await new JournalReader(location).readAll(sessionId)).records);
     return result;
@@ -134,14 +179,7 @@ export async function runCommand(argv: readonly string[], deps: CliDeps): Promis
         deps.io.input.off("om-interrupt", interrupt);
       }
     }
-    const exitCode = await runRepl({
-      io: deps.io,
-      maxTurns,
-      runTurn: runOne,
-      appendLimit: async (entry) => {
-        await bootstrapped.journal.append(entry, { by: "system" });
-      },
-    });
+    const exitCode = await runRepl({ io: deps.io, runTurn: runOne });
     return { stdout: "", stderr: "", exitCode };
   } finally {
     await bootstrapped.writer.close();

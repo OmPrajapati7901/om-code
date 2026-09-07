@@ -16,6 +16,6 @@ export async function showCommand(argv: readonly string[], deps: CliDeps): Promi
     projectRoot: findProjectRoot(deps.cwd),
   };
   const view = materialize((await new JournalReader(location).readAll(sessionId)).records);
-  deps.io.write(renderTranscript(sessionId, view));
+  deps.io.write(renderTranscript(sessionId, view, location.omHome));
   return { stdout: "", stderr: "", exitCode: EXIT.ok };
 }

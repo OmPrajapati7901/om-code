@@ -25,6 +25,9 @@ export type ResolvedSettings = {
   readonly baseUrl: ResolvedEntry;
   readonly model: ResolvedEntry;
   readonly credential: ResolvedEntry & { readonly secret: CredentialSecret };
+  readonly maxWallClockMs: ResolvedEntry;
+  readonly pricingInputPerMTok: ResolvedEntry;
+  readonly pricingOutputPerMTok: ResolvedEntry;
 };
 
 export type ResolveInput = {
@@ -42,7 +45,7 @@ function pickRaw(
   envVar: string,
   input: ResolveInput,
 ): { raw: string | undefined; tier: Tier; origin: string } {
-  const flagValue = input.flags[key];
+  const flagValue = (input.flags as Readonly<Partial<Record<SettingKey, string>>>)[key];
   if (flagValue !== undefined) {
     return { raw: flagValue, tier: "flag", origin: flagNameFor(key) };
   }
@@ -93,5 +96,8 @@ export function resolveSettings(input: ResolveInput): ResolvedSettings {
       origin: credentialEntry.origin,
       secret: new CredentialSecret(credentialRef, secret),
     },
+    maxWallClockMs: entries.maxWallClockMs,
+    pricingInputPerMTok: entries.pricingInputPerMTok,
+    pricingOutputPerMTok: entries.pricingOutputPerMTok,
   };
 }

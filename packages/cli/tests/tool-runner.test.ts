@@ -1,6 +1,9 @@
 /**
  * LRN-18 A5 failure table: every failure returns a failed outcome, never throws.
+ * LRN-19: truncation wraps every outcome; notrunc is operator-only (AC-19.7).
  */
+import type { Bounder } from "@om-code/context";
+import { createBounder } from "@om-code/context";
 import type { CompleteToolCall, ToolCall } from "@om-code/protocol";
 import { createRegistry, type Tool, type ToolIo } from "@om-code/tools";
 import { describe, expect, it } from "vitest";
@@ -25,7 +28,14 @@ function callFor(name: string, argsRaw: string, callId = "c1"): CompleteToolCall
   return { index: 0, call_id: callId, name, arguments_raw: argsRaw };
 }
 
-function depsFor(registry: ReturnType<typeof createRegistry>) {
+function passthroughBounder(): Bounder {
+  return { bound: async (outcome) => ({ ...outcome }) };
+}
+
+function depsFor(
+  registry: ReturnType<typeof createRegistry>,
+  overrides: Partial<{ bounder: Bounder; notrunc: boolean }> = {},
+) {
   const recorded: ToolCall[] = [];
   const runner = createToolRunner({
     registry,
@@ -33,6 +43,8 @@ function depsFor(registry: ReturnType<typeof createRegistry>) {
     cwd: "/repo",
     envAllowlist: [],
     budget: { maxBytes: 4096, maxMs: 5000 },
+    bounder: overrides.bounder ?? passthroughBounder(),
+    ...(overrides.notrunc === undefined ? {} : { notrunc: overrides.notrunc }),
   });
   return { runner, recorded };
 }
@@ -175,5 +187,55 @@ describe("createToolRunner (LRN-18 A5)", () => {
     });
     expect(outcome).toEqual(expected);
     expect(recorded).toHaveLength(1);
+  });
+
+  it("AC-19.7 rejects a model-supplied notrunc as invalid input", async () => {
+    // The tools' Zod schemas are strict and know no `notrunc` key, so the
+    // marker can only arrive via `om run --notrunc`, never via arguments_raw.
+    const { readOnlyTools } = await import("@om-code/tools");
+    const { runner, recorded } = depsFor(createRegistry(readOnlyTools()));
+    const outcome = await runner.run(callFor("read", '{"path":"x","notrunc":true}'), {
+      record: async (entry) => {
+        recorded.push(entry);
+      },
+      signal: new AbortController().signal,
+    });
+    expect(outcome.status).toBe("error");
+    expect(recorded).toHaveLength(0);
+  });
+
+  it("AC-19.7 truncates by default but passes through with --notrunc", async () => {
+    const puts: Uint8Array[] = [];
+    const bounder = createBounder({
+      blobs: {
+        put: async (bytes: Uint8Array) => {
+          puts.push(bytes);
+          return `sha256:${"f".repeat(64)}`;
+        },
+      },
+      maxResultBytes: 16,
+    });
+    const big = fakeTool({
+      execute: async function* () {
+        yield {
+          type: "end",
+          result: { status: "ok", preview: "x".repeat(1024), bytes: 1024, truncated: false },
+        };
+      },
+    });
+    const record = async () => {};
+    const signal = new AbortController().signal;
+    const capped = await depsFor(createRegistry([big]), { bounder }).runner.run(
+      callFor("read", "{}"),
+      { record, signal },
+    );
+    expect(capped.truncated).toBe(true);
+    expect(puts).toHaveLength(1);
+    const marked = await depsFor(createRegistry([big]), { bounder, notrunc: true }).runner.run(
+      callFor("read", "{}"),
+      { record, signal },
+    );
+    expect(marked.preview).toBe("x".repeat(1024));
+    expect(marked.truncated).toBe(false);
   });
 });

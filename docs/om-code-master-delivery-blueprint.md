@@ -375,7 +375,7 @@ TypeScript-internal state (LRN-04's config) stays camelCase (see `AGENTS.md`).
 
 | Command | Behaviour |
 |---|---|
-| `om run [-p <prompt>]` | Interactive multi-turn REPL by default; `-p` is one-shot. `--max-turns`, `--max-cost`, `--mode read_only\|manual`, `--json` |
+| `om run [-p <prompt>]` | Interactive multi-turn REPL by default; `-p` is one-shot. `--max-turns`, `--max-cost`, `--mode read_only\|manual`, `--notrunc`, `--json` |
 | `om resume <id>` | Continue a session; reconcile unknown outcomes first |
 | `om sessions` | List sessions for this project with status and last activity |
 | `om show <id>` | Render a session from its journal |
@@ -390,8 +390,14 @@ Exit codes: `0` success · `1` error · `2` needs approval (resumable) · `3` li
 **On `--max-cost`.** Cost is not knowable from an OpenAI-compatible endpoint generically: many report
 no `usage`, and none report price. So `--max-cost` is enforced **only** when `pricing.inputPerMTok`
 and `pricing.outputPerMTok` are configured for the active model *and* the endpoint returns usage. When
-either is missing, cost is reported as `unknown`, `--max-cost` is rejected at startup with that reason,
-and `--max-turns` plus the wall-clock cap remain the effective budget. Do not silently estimate.
+pricing is unconfigured, `--max-cost` is rejected at startup with that reason; when pricing exists but
+the first response carries `usage: {kind: "unknown"}` — unknowable before the first call — the run
+aborts with an explanatory `error` entry (`reason: "max-cost-unknown-usage"`, exit 1) instead of
+estimating. `--max-turns` plus the wall-clock cap remain the effective budget. Do not silently estimate.
+
+**On `--notrunc`.** Operator-only opt-out of result truncation for one run. It marks every tool call
+in that run and prints a warning; a model-supplied `notrunc` inside tool arguments is rejected as
+invalid input (the tools' schemas know no such key), so the model can never disable its own bounds.
 
 ### 8.2 Stub RPC
 

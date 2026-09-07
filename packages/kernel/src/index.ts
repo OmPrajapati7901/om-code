@@ -4,7 +4,14 @@
 
 export { IDENTITY, RULES, type Rule } from "./identity.js";
 export { runTurn, type TurnEvent, type TurnInput } from "./loop.js";
-export type { JournalSink, ToolOutcome, ToolRunner } from "./ports.js";
+export type {
+  BudgetTrip,
+  BudgetTripReason,
+  JournalSink,
+  ToolOutcome,
+  ToolRunner,
+  TurnBudget,
+} from "./ports.js";
 export {
   type AssembledPrompt,
   assemblePrompt,

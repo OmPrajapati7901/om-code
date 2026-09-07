@@ -5,6 +5,7 @@ import type {
   JournalRecord,
   ToolCall,
   ToolStatus,
+  Usage,
 } from "@om-code/protocol";
 
 /** Durable journal boundary owned by the kernel; storage satisfies it structurally. */
@@ -31,4 +32,21 @@ export type ToolRunner = {
     call: CompleteToolCall,
     deps: { readonly record: (call: ToolCall) => Promise<void>; readonly signal: AbortSignal },
   ): Promise<ToolOutcome>;
+};
+
+/**
+ * Run-budget boundary owned by the kernel; context's `RunBudget` satisfies it
+ * structurally (kernel must not import context). `check` runs before each
+ * inference, `recordInference` after it.
+ */
+export type BudgetTripReason = "max-turns" | "wall-clock" | "max-cost" | "max-cost-unknown-usage";
+
+export type BudgetTrip = {
+  readonly reason: BudgetTripReason;
+  readonly message: string;
+};
+
+export type TurnBudget = {
+  check(): BudgetTrip | undefined;
+  recordInference(usage: Usage): BudgetTrip | undefined;
 };

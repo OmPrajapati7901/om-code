@@ -277,11 +277,21 @@ describe("om run", () => {
     expect(view.meta?.status).toBe("idle");
   });
 
-  it("AC-11.7 exits 3 and journals the interim --max-turns cap", async () => {
+  it("AC-19.5 stops an agent run at --max-turns with exit 3 and a journaled reason", async () => {
     const location = await project();
-    const provider = new FakeProvider(textTurns("only one", "must not run"));
-    const cli = harness(location.root, location.omHome, provider, "one\ntwo\n");
-    const result = await runCli(["run", "--max-turns", "1"], cli.deps);
+    const provider = new FakeProvider({
+      turns: [
+        {
+          kind: "stream",
+          deltas: [
+            { tool: { index: 0, call_id: "c1", name: "grep", arguments: '{"pattern":"x"}' } },
+          ],
+        },
+        { kind: "stream", deltas: [{ text: "never inferred" }] },
+      ],
+    });
+    const cli = harness(location.root, location.omHome, provider);
+    const result = await runCli(["run", "-p", "question", "--max-turns", "1"], cli.deps);
 
     expect(result.exitCode).toBe(3);
     expect(provider.requests).toHaveLength(1);
@@ -290,6 +300,44 @@ describe("om run", () => {
       source: "local",
       reason: "max-turns",
       retryable: false,
+    });
+  });
+
+  it("AC-19.6 enforces --max-cost within one in-flight call when pricing and usage exist", async () => {
+    const location = await project();
+    const provider = new FakeProvider({
+      turns: [
+        {
+          kind: "stream",
+          deltas: [{ text: "pricey" }],
+          usage: { input_tokens: 1000, output_tokens: 0 },
+        },
+      ],
+    });
+    const cli = harness(location.root, location.omHome, provider);
+    cli.deps.env.OM_PRICING_INPUT_PER_MTOK = "1000";
+    cli.deps.env.OM_PRICING_OUTPUT_PER_MTOK = "1000";
+    const result = await runCli(["run", "-p", "question", "--max-cost", "0.5"], cli.deps);
+
+    expect(result.exitCode).toBe(3);
+    const { view } = await onlySession(location.root, location.omHome);
+    expect(view.errors.at(-1)).toMatchObject({ source: "local", reason: "max-cost" });
+  });
+
+  it("AC-19.6 aborts with exit 1 when pricing exists but the endpoint reports no usage", async () => {
+    const location = await project();
+    const provider = new FakeProvider(textTurns("mystery"));
+    const cli = harness(location.root, location.omHome, provider);
+    cli.deps.env.OM_PRICING_INPUT_PER_MTOK = "1000";
+    cli.deps.env.OM_PRICING_OUTPUT_PER_MTOK = "1000";
+    const result = await runCli(["run", "-p", "question", "--max-cost", "10"], cli.deps);
+
+    expect(result.exitCode).toBe(1);
+    expect(cli.stderr.join("")).toContain("no usage");
+    const { view } = await onlySession(location.root, location.omHome);
+    expect(view.errors.at(-1)).toMatchObject({
+      source: "local",
+      reason: "max-cost-unknown-usage",
     });
   });
 

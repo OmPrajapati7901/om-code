@@ -26,3 +26,9 @@ export type ExecutingToYield = Transition<"executing_tools", "yield_candidate">;
 export type ExecutingToCompleted = Transition<"executing_tools", "completed">;
 // @ts-expect-error a yield candidate carries no tool calls to execute
 export type YieldToExecuting = Transition<"yield_candidate", "executing_tools">;
+// @ts-expect-error limited is terminal
+export type LimitedToIdle = Transition<"limited", "idle">;
+// @ts-expect-error limited never completes without another inference
+export type LimitedToCompleted = Transition<"limited", "completed">;
+// @ts-expect-error a yield candidate never consults the budget
+export type YieldToLimited = Transition<"yield_candidate", "limited">;

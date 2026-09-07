@@ -21,6 +21,7 @@
     "test:coverage": "vitest run --coverage --coverage.reporter=text"
   },
   "dependencies": {
+    "@om-code/context": "workspace:*",
     "@om-code/kernel": "workspace:*",
     "@om-code/protocol": "workspace:*",
     "@om-code/providers": "workspace:*",

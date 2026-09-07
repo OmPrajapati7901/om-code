@@ -35,6 +35,9 @@ try {
       new OpenAICompatibleProvider({
         baseUrl: settings.baseUrl,
         getApiKey: () => settings.credential.unwrap(),
+        // Cost caps need reported usage; request it only when pricing makes
+        // the numbers meaningful (blueprint §8.1).
+        ...(settings.pricing === undefined ? {} : { includeUsage: true }),
       }),
     osLabel: `${process.platform}/${process.arch}`,
   });

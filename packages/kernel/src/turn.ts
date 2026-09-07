@@ -31,6 +31,7 @@ export type TurnState =
       readonly usage: Usage;
     }
   | { readonly phase: "failed"; readonly turnId: string; readonly error: ErrorEntry }
+  | { readonly phase: "limited"; readonly turnId: string; readonly error: ErrorEntry }
   | {
       readonly phase: "interrupted";
       readonly turnId: string;
@@ -41,13 +42,14 @@ export type TurnPhase = TurnState["phase"];
 
 type Successors = {
   idle: "building_context";
-  building_context: "waiting_for_model" | "failed";
+  building_context: "waiting_for_model" | "limited" | "failed";
   waiting_for_model: "streaming_model" | "failed" | "interrupted";
-  streaming_model: "yield_candidate" | "executing_tools" | "failed" | "interrupted";
-  executing_tools: "building_context" | "failed" | "interrupted";
+  streaming_model: "yield_candidate" | "executing_tools" | "limited" | "failed" | "interrupted";
+  executing_tools: "building_context" | "limited" | "failed" | "interrupted";
   yield_candidate: "completed";
   completed: never;
   failed: never;
+  limited: never;
   interrupted: never;
 };
 
