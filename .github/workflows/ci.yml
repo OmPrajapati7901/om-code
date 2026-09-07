@@ -1,0 +1,52 @@
+# LRN-15: the single macOS arm64 gate. No matrix — ADR-023 scope.
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    # AC-15.1: one runner, macOS arm64. No other OS in the matrix.
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      # AC-15.1 is a claim about the machine, so assert it rather than trust
+      # the label.
+      - name: Assert arm64 runner
+        run: '[ "$(uname -m)" = "arm64" ] || { uname -m; exit 1; }'
+
+      # AGENTS.md: rg is a documented prerequisite; the local-ts driver's
+      # glob/grep delegate to it and the contract suite's expectation tables
+      # were captured from ripgrep 15.2.0.
+      - name: Install ripgrep
+        run: brew install ripgrep
+      - name: Assert ripgrep major version
+        run: |
+          rg --version
+          rg --version | head -1 | grep -qE '^ripgrep 15\.' || {
+            echo "::error::ripgrep major version moved off 15; tests/contract expectation tables were captured from 15.2.0 (AGENTS.md)."
+            exit 1
+          }
+
+      - uses: pnpm/action-setup@v4 # reads packageManager from package.json
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24.20.0 # .tool-versions; setup-node cannot read that format
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile # AC-15.2
+      - run: pnpm exec biome check . # AC-15.2
+      - run: pnpm run lint:deps # AC-15.2 (needs no build)
+      - run: pnpm run typecheck # AC-15.2 — pretypecheck builds the workspace
+
+      # AC-15.3: the suite's own budget. A step-level timeout fails the job
+      # when exceeded; install and brew are deliberately outside it.
+      # AC-15.4: coverage printed by the reporter, gated by nothing.
+      # OM_TEST_REAL_KEYCHAIN stays unset so the keychain test skips its
+      # security(1) spawn.
+      - name: Unit and property tests (coverage printed, not gated)
+        timeout-minutes: 3
+        run: pnpm run test:coverage

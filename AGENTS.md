@@ -23,6 +23,7 @@ The pnpm workspace holds `cli`, `storage`, `protocol`, `session` (pure materiali
 - `pnpm run check` — the full local gate: lint, typecheck, build, test, in that order.
 - `pnpm run lint` (`biome check .` plus `pnpm run lint:deps`), and `pnpm -r --if-present run typecheck`, `test`, `build` — the individual gates; required packages must define these scripts.
 - `pnpm run lint:deps` — dependency-cruiser layering graph (AC-14.4): protocol leaf, session→protocol, kernel→protocol/session, adapters never cross or touch cli, nothing touches cli, no cycles. Workspace imports resolve to `src` via `tsconfig.depcruise.json` (never extend it from a package), so it needs no build first; `dist/` is excluded.
+- `pnpm run test:coverage` — the suite once per package with the text coverage reporter printed, never gated (AC-15.4). `.github/workflows/ci.yml` is the single macOS arm64 gate: frozen install, `biome check`, `lint:deps`, typecheck (which builds first), then the suite with coverage; it installs ripgrep via Homebrew and fails if the suite exceeds 3 minutes (AC-15.3).
 - `pnpm --filter @om-code/tests test` — shared provider contracts, boundary checks, and journal integration; build first when running individual suites.
 - `node tests/manual/transport-close.mjs` — explicit loopback socket-close verification, outside the default socket-free suite.
 - `node tests/manual/journal-demo.mjs` — explicit native-lock/SIGKILL/repair and file-permission demonstration using temporary state.

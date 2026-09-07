@@ -13,6 +13,10 @@ dist/
 # LRN-01 raw SSE captures stay untracked; curated fixtures land in tests/ at LRN-07c
 tmp/
 
+# LRN-15: coverage is printed (text reporter), never written — guard against a
+# future reporter change emitting an HTML tree.
+coverage/
+
 
 # macOS noise
 .DS_Store

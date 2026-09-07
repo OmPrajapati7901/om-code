@@ -17,7 +17,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json && chmod +x dist/om.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage --coverage.reporter=text"
   },
   "dependencies": {
     "@om-code/kernel": "workspace:*",
@@ -29,6 +30,7 @@
   },
   "devDependencies": {
     "@types/node": "24.13.3",
+    "@vitest/coverage-v8": "3.2.7",
     "typescript": "5.9.3",
     "vitest": "3.2.7"
   }
