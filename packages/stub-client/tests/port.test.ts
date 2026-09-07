@@ -171,7 +171,10 @@ const conformanceDouble = {
   }),
   read: async function* (_params: ReadParams, _signal: AbortSignal) {
     yield { type: "chunk", bytes: new Uint8Array([104, 105]) };
-    yield { type: "end", frame: { status: "ok", bytes: 2, truncated: false, elapsedMs: 0 } };
+    yield {
+      type: "end",
+      frame: { status: "ok", bytes: 2, truncated: false, elapsedMs: 0, totalLines: 1 },
+    };
   },
   write: async (_params: WriteParams, _signal: AbortSignal) => ({
     status: "ok",

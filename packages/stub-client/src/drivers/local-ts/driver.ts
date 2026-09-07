@@ -88,9 +88,16 @@ async function* readStream(
   const counter = createByteCounter(params.maxBytes);
   let truncated = false;
   let timedOut = deadline.signal.aborted;
+  let totalLines: number | null = null;
   const finish = (status: "ok" | "timeout"): ReadEvent => ({
     type: "end",
-    frame: { status, bytes: counter.used, truncated, elapsedMs: elapsedMsSince(startedAt) },
+    frame: {
+      status,
+      bytes: counter.used,
+      truncated,
+      elapsedMs: elapsedMsSince(startedAt),
+      totalLines: status === "timeout" ? null : totalLines,
+    },
   });
   try {
     if (timedOut) {
@@ -101,11 +108,11 @@ async function* readStream(
     const handle = resolveOpen(rootCanonical, cwdCanonical, params.path);
     try {
       if (params.range === undefined) {
-        yield* readRaw(handle.fd, deadline, counter, (value) => {
+        totalLines = yield* readRaw(handle.fd, deadline, counter, (value) => {
           truncated = value;
         });
       } else {
-        yield* readRanged(handle.fd, params.range, deadline, counter, (value) => {
+        totalLines = yield* readRanged(handle.fd, params.range, deadline, counter, (value) => {
           truncated = value;
         });
       }
@@ -130,10 +137,14 @@ async function* readRaw(
   deadline: DeadlineView,
   counter: CounterView,
   onTruncated: (value: boolean) => void,
-): AsyncIterable<ReadEvent> {
+): AsyncGenerator<ReadEvent, number, void> {
   const buffer = Buffer.alloc(READ_CHUNK_BYTES);
+  let lineFeeds = 0;
+  let sawBytes = false;
+  let lastByte = 0;
+  let emit = true;
   for (;;) {
-    if (deadline.signal.aborted) return;
+    if (deadline.signal.aborted) return lineFeeds;
     let read: number;
     try {
       read = readSync(fd, buffer, 0, buffer.length, null);
@@ -145,13 +156,20 @@ async function* readRaw(
       }
       throw new StubError("io", `cannot read file: ${(error as Error).message}`, { code });
     }
-    if (read === 0) return;
-    const allowance = counter.allow(read);
-    if (allowance.emit > 0)
-      yield { type: "chunk", bytes: new Uint8Array(buffer.subarray(0, allowance.emit)) };
-    if (allowance.exhausted) {
-      onTruncated(true);
-      return;
+    if (read === 0) return lineFeeds + (sawBytes && lastByte !== 0x0a ? 1 : 0);
+    sawBytes = true;
+    lastByte = buffer[read - 1] ?? lastByte;
+    for (let index = 0; index < read; index++) {
+      if (buffer[index] === 0x0a) lineFeeds += 1;
+    }
+    if (emit) {
+      const allowance = counter.allow(read);
+      if (allowance.emit > 0)
+        yield { type: "chunk", bytes: new Uint8Array(buffer.subarray(0, allowance.emit)) };
+      if (allowance.exhausted) {
+        onTruncated(true);
+        emit = false;
+      }
     }
   }
 }
@@ -162,26 +180,26 @@ async function* readRanged(
   deadline: DeadlineView,
   counter: CounterView,
   onTruncated: (value: boolean) => void,
-): AsyncIterable<ReadEvent> {
-  const decoder = new TextDecoder("utf-8", { fatal: false });
+): AsyncGenerator<ReadEvent, number, void> {
   const buffer = Buffer.alloc(READ_CHUNK_BYTES);
-  let carry = "";
+  let carry = Buffer.alloc(0);
   let lineNumber = 0;
+  let lineFeeds = 0;
+  let sawBytes = false;
+  let lastByte = 0;
+  let emit = true;
+  let rangeComplete = false;
   // Returns true once the byte budget is exhausted.
-  const emitLine = function* (text: string, newline: boolean): Generator<ReadEvent, boolean> {
+  const emitLine = function* (bytes: Buffer): Generator<ReadEvent, boolean> {
     lineNumber += 1;
-    if (lineNumber < range.startLine || lineNumber > range.endLine) return false;
-    const out = newline ? `${text}\n` : text;
-    const encoded = Buffer.from(out, "utf8");
-    const allowance = counter.allow(encoded.length);
+    if (!emit || lineNumber < range.startLine || lineNumber > range.endLine) return false;
+    const allowance = counter.allow(bytes.length);
     if (allowance.emit > 0)
-      yield { type: "chunk", bytes: new Uint8Array(encoded.subarray(0, allowance.emit)) };
+      yield { type: "chunk", bytes: new Uint8Array(bytes.subarray(0, allowance.emit)) };
     return allowance.exhausted;
   };
-  let eof = false;
-  let exhausted = false;
-  while (!eof && !exhausted) {
-    if (deadline.signal.aborted) return;
+  for (;;) {
+    if (deadline.signal.aborted) return lineFeeds;
     let read: number;
     try {
       read = readSync(fd, buffer, 0, buffer.length, null);
@@ -194,25 +212,37 @@ async function* readRanged(
       throw new StubError("io", `cannot read file: ${(error as Error).message}`, { code });
     }
     if (read === 0) {
-      eof = true;
-      carry += decoder.decode();
-    } else {
-      carry += decoder.decode(buffer.subarray(0, read), { stream: true });
-    }
-    for (;;) {
-      const newline = carry.indexOf("\n");
-      if (newline < 0) break;
-      const text = carry.slice(0, newline);
-      carry = carry.slice(newline + 1);
-      if (yield* emitLine(text, true)) {
-        exhausted = true;
-        break;
+      if (!rangeComplete && carry.length > 0 && emit) {
+        if (yield* emitLine(carry)) {
+          onTruncated(true);
+        }
       }
-      if (lineNumber >= range.endLine) return;
+      return lineFeeds + (sawBytes && lastByte !== 0x0a ? 1 : 0);
+    }
+    sawBytes = true;
+    lastByte = buffer[read - 1] ?? lastByte;
+    for (let index = 0; index < read; index++) {
+      if (buffer[index] === 0x0a) lineFeeds += 1;
+    }
+    if (!rangeComplete) {
+      carry = Buffer.concat([carry, buffer.subarray(0, read)]);
+      for (;;) {
+        const newline = carry.indexOf(0x0a);
+        if (newline < 0) break;
+        const line = carry.subarray(0, newline + 1);
+        carry = carry.subarray(newline + 1);
+        if (yield* emitLine(line)) {
+          onTruncated(true);
+          emit = false;
+        }
+        if (lineNumber >= range.endLine) {
+          rangeComplete = true;
+          carry = Buffer.alloc(0);
+          break;
+        }
+      }
     }
   }
-  if (!exhausted && carry.length > 0) exhausted = yield* emitLine(carry, false);
-  if (exhausted) onTruncated(true);
 }
 
 function statEntry(rootCanonical: string, params: StatParams, startedAt: number): StatResult {

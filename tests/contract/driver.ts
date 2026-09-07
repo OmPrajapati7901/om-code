@@ -78,6 +78,8 @@ export function driverContract(
       writeFileSync(join(root, "app.ts"), "export const app = true;\n");
       writeFileSync(join(root, "notes.txt"), "just a needle in notes\nsecond line here\n");
       writeFileSync(join(root, "utf8.txt"), "alpha\nβeta gamma\ncafé au lait\n");
+      writeFileSync(join(root, "no-final-newline.txt"), "first\nsecond");
+      writeFileSync(join(root, "empty.txt"), "");
       writeFileSync(join(root, "big.txt"), "0123456789abcdef\n".repeat(16384));
       writeFileSync(
         join(root, "ticks.txt"),
@@ -170,6 +172,7 @@ export function driverContract(
       );
       expect(end?.frame.status).toBe("ok");
       expect(end?.frame.truncated).toBe(false);
+      expect(end?.frame.totalLines).toBe(4);
     });
 
     it("read honors a line range", async () => {
@@ -185,6 +188,8 @@ export function driverContract(
       expect(text).toBe(
         '// needle one: the quick brown fox\nexport const beta = "needle two here";\n',
       );
+      const end = events.find((event) => event.type === "end");
+      expect(end?.frame.totalLines).toBe(4);
     });
 
     it("read round-trips multibyte UTF-8 byte-exactly", async () => {
@@ -193,6 +198,28 @@ export function driverContract(
         events.filter((event) => event.type === "chunk").map((event) => Buffer.from(event.bytes)),
       );
       expect(bytes.equals(readFileSync(join(root, "utf8.txt")))).toBe(true);
+    });
+
+    it("ranged read round-trips multibyte UTF-8 byte-exactly", async () => {
+      const events = await collect(
+        client.read(
+          { ...envelope(), path: "utf8.txt", range: { startLine: 2, endLine: 3 } },
+          signal(),
+        ),
+      );
+      const bytes = Buffer.concat(
+        events.filter((event) => event.type === "chunk").map((event) => Buffer.from(event.bytes)),
+      );
+      expect(bytes.equals(Buffer.from("βeta gamma\ncafé au lait\n"))).toBe(true);
+    });
+
+    it("read counts a final partial line and an empty file", async () => {
+      const partial = await collect(
+        client.read({ ...envelope(), path: "no-final-newline.txt" }, signal()),
+      );
+      expect(partial.find((event) => event.type === "end")?.frame.totalLines).toBe(2);
+      const empty = await collect(client.read({ ...envelope(), path: "empty.txt" }, signal()));
+      expect(empty.find((event) => event.type === "end")?.frame.totalLines).toBe(0);
     });
 
     it("stat reports files, directories, and absence", async () => {
@@ -253,6 +280,7 @@ export function driverContract(
       expect(total).toBe(1024);
       expect(end?.frame.status).toBe("ok");
       expect(end?.frame.truncated).toBe(true);
+      expect(end?.frame.totalLines).toBe(16384);
     });
 
     it("AC-13.3 read aborts at the time budget with elapsedMs", async () => {
@@ -266,6 +294,7 @@ export function driverContract(
         const end = events.find((event) => event.type === "end");
         expect(end?.frame.status).toBe("timeout");
         expect(end?.frame.elapsedMs ?? 0).toBeGreaterThanOrEqual(200);
+        expect(end?.frame.totalLines).toBeNull();
       } finally {
         closeSync(writer);
       }

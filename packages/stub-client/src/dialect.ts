@@ -46,6 +46,13 @@
  * Suite constraint: no two fixture paths may differ only by ASCII case or
  * only by Unicode normalization form, and no assertion may turn on a
  * normalization-equivalence outcome.
+ *
+ * Read line counting: a line is a maximal run of bytes terminated by 0x0A
+ * or EOF. A file without a trailing 0x0A counts its final partial line; an
+ * empty file has zero lines. CRLF is one line and its 0x0D is content; a lone
+ * 0x0D is not a terminator. Counting is over raw bytes, so invalid UTF-8
+ * cannot change the result. It continues beyond a requested range and the
+ * emitted-byte budget; only a time-budget stop makes `totalLines` unknown.
  */
 
 import { StubError } from "./errors.js";

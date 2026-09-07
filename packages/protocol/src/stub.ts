@@ -209,7 +209,18 @@ export const execFrameSchema = stubFrameSchema.extend({
 
 export type ExecFrame = z.infer<typeof execFrameSchema>;
 
-export type ReadEvent = { type: "chunk"; bytes: Uint8Array } | { type: "end"; frame: StubFrame };
+export const readFrameSchema = stubFrameSchema.extend({
+  /**
+   * Lines in the whole file, independent of `range` and `maxBytes`.
+   * Counting reads bytes it does not emit, so it costs no byte budget.
+   * Null means `maxMs` stopped the count before EOF.
+   */
+  totalLines: z.number().int().nonnegative().nullable(),
+});
+
+export type ReadFrame = z.infer<typeof readFrameSchema>;
+
+export type ReadEvent = { type: "chunk"; bytes: Uint8Array } | { type: "end"; frame: ReadFrame };
 
 export type ExecEvent =
   | { type: "stdout"; bytes: Uint8Array }
