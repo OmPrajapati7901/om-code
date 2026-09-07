@@ -13,7 +13,8 @@
       "@om-code/providers": ["packages/providers/src/index.ts"],
       "@om-code/session": ["packages/session/src/index.ts"],
       "@om-code/storage": ["packages/storage/src/index.ts"],
-      "@om-code/stub-client": ["packages/stub-client/src/index.ts"]
+      "@om-code/stub-client": ["packages/stub-client/src/index.ts"],
+      "@om-code/tools": ["packages/tools/src/index.ts"]
     }
   },
   "include": ["packages/*/src/**/*.ts", "tests/**/*.ts"]

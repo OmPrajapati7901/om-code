@@ -1,0 +1,18 @@
+import type { Tool } from "@om-code/tools";
+
+// AC-16.1 negative control: a tool lacking plan() must not compile.
+export const broken: Tool = {
+  descriptor: () => ({
+    name: "read",
+    version: "0.1.0",
+    description: "missing plan",
+    risk_class: "read",
+    parameters: {},
+  }),
+  execute: async function* () {
+    yield {
+      type: "end",
+      result: { status: "ok", preview: "", bytes: 0, truncated: false },
+    };
+  },
+};

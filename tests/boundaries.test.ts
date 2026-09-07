@@ -76,6 +76,18 @@ const BOUNDARIES: readonly BoundarySpec[] = [
     bannedDependencies: ["@om-code/policy"],
     bansClockReads: false,
   },
+  {
+    name: "tools",
+    allowedDependencies: ["@om-code/protocol", "zod"],
+    bannedDependencies: [
+      "@om-code/stub-client",
+      "@om-code/storage",
+      "@om-code/sandbox",
+      "@om-code/providers",
+      "@om-code/context",
+    ],
+    bansClockReads: false,
+  },
 ];
 
 it.each(BOUNDARIES)(

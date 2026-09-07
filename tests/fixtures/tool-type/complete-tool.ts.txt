@@ -1,0 +1,22 @@
+import type { Tool } from "@om-code/tools";
+
+// AC-16.1 positive control: a complete tool compiles clean. If the negative
+// control ever passes for the wrong reason (e.g. tsc silently checking
+// nothing), this file's absence of diagnostics is what proves the run is
+// real — the assertion below requires diagnostics to name the other file.
+export const whole: Tool = {
+  descriptor: () => ({
+    name: "read",
+    version: "0.1.0",
+    description: "complete",
+    risk_class: "read",
+    parameters: {},
+  }),
+  plan: async () => ({ risk_class: "read" }),
+  execute: async function* () {
+    yield {
+      type: "end",
+      result: { status: "ok", preview: "", bytes: 0, truncated: false },
+    };
+  },
+};
