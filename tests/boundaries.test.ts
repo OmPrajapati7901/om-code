@@ -21,6 +21,7 @@ type BoundarySpec = {
   readonly bannedDependencies: readonly string[];
   readonly bansAllNodeImports: boolean;
   readonly bansClockReads: boolean;
+  readonly bansHostIo: boolean;
 };
 
 const BOUNDARIES: readonly BoundarySpec[] = [
@@ -37,6 +38,7 @@ const BOUNDARIES: readonly BoundarySpec[] = [
     bannedDependencies: ["@om-code/sandbox", "@om-code/stub-client"],
     bansAllNodeImports: false,
     bansClockReads: false,
+    bansHostIo: true,
   },
   {
     name: "session",
@@ -44,6 +46,7 @@ const BOUNDARIES: readonly BoundarySpec[] = [
     bannedDependencies: [],
     bansAllNodeImports: true,
     bansClockReads: false,
+    bansHostIo: true,
   },
   {
     name: "providers",
@@ -51,6 +54,7 @@ const BOUNDARIES: readonly BoundarySpec[] = [
     bannedDependencies: [],
     bansAllNodeImports: false,
     bansClockReads: false,
+    bansHostIo: true,
   },
   {
     name: "kernel",
@@ -65,12 +69,31 @@ const BOUNDARIES: readonly BoundarySpec[] = [
     // AC-9.4: prompt assembly is a pure function of its input — the date is
     // passed in, never read live — so a clock call here is a regression.
     bansClockReads: true,
+    bansHostIo: true,
+  },
+  {
+    name: "stub-client",
+    allowedDependencies: ["@om-code/protocol"],
+    bannedDependencies: ["@om-code/policy"],
+    bansAllNodeImports: false,
+    bansClockReads: false,
+    // DoD-5 permits host I/O in exactly this module (plus storage and
+    // native/): LRN-13's local-ts driver lives here, so the fs/child_process
+    // grep below is skipped for it — LRN-13 must not have to unwind this.
+    bansHostIo: false,
   },
 ];
 
 it.each(BOUNDARIES)(
   "$name keeps approved dependencies and performs no direct file/process I/O",
-  ({ name, allowedDependencies, bannedDependencies, bansAllNodeImports, bansClockReads }) => {
+  ({
+    name,
+    allowedDependencies,
+    bannedDependencies,
+    bansAllNodeImports,
+    bansClockReads,
+    bansHostIo,
+  }) => {
     const path = resolve(root, "packages", name);
     const manifest = JSON.parse(readFileSync(join(path, "package.json"), "utf8"));
     expect(Object.keys(manifest.dependencies).sort()).toEqual([...allowedDependencies].sort());
@@ -81,9 +104,10 @@ it.each(BOUNDARIES)(
     expect(bannedDependencies.filter((dependency) => dependency in declared)).toEqual([]);
     for (const file of files(join(path, "src"))) {
       const source = readFileSync(file, "utf8");
-      expect(source).not.toMatch(
-        /(?:from\s*|import\s*\()["'](?:node:)?(?:fs(?:\/promises)?|child_process)["']/,
-      );
+      if (bansHostIo)
+        expect(source).not.toMatch(
+          /(?:from\s*|import\s*\()["'](?:node:)?(?:fs(?:\/promises)?|child_process)["']/,
+        );
       if (bansAllNodeImports) expect(source).not.toMatch(/["']node:/);
       if (bansClockReads) expect(source).not.toMatch(/\bnew\s+Date\s*\(\s*\)|\bDate\.now\s*\(/);
     }

@@ -17,7 +17,7 @@ After every change, assess whether it introduces durable context that other agen
 
 ## Build, Test, and Development Commands
 
-The pnpm workspace holds `cli`, `storage`, `protocol`, `session` (pure materialization), `providers` (Chat Completions), `kernel` (system prompt assembly and the turn loop), and a private root `tests/` workspace for shared contracts and integration. Do not claim a gate passed without running it.
+The pnpm workspace holds `cli`, `storage`, `protocol`, `session` (pure materialization), `providers` (Chat Completions), `kernel` (system prompt assembly and the turn loop), `stub-client` (the stub port: interface, typed errors, dialect contract), and a private root `tests/` workspace for shared contracts and integration. Do not claim a gate passed without running it.
 
 - `pnpm install --frozen-lockfile` — reproduce pinned TypeScript dependencies.
 - `pnpm run check` — the full local gate: lint, typecheck, build, test, in that order.
@@ -53,7 +53,7 @@ Use Biome for TypeScript, and rustfmt/Clippy for Rust. Use ATX headings, concise
 
 Follow SOLID principles and sound object-oriented design where they improve clarity and changeability: keep modules and types focused on one responsibility, depend on narrow abstractions at architectural boundaries, prefer composition over inheritance, preserve substitutability, and expose small cohesive interfaces. Encapsulate invariants and keep dependencies explicit. Avoid speculative abstractions, unnecessary class hierarchies, and design patterns that add complexity without a demonstrated need; simple functions and data types are often the better design.
 
-Keep provider-specific logic and SDK types out of `packages/kernel`. `packages/protocol` is the wire-schema authority; Rust DTOs are generated or schema-checked mirrors. `packages/sandbox` and `packages/stub-client` depend on protocol contracts, not each other; the CLI composes them.
+Keep provider-specific logic and SDK types out of `packages/kernel`. `packages/protocol` is the wire-schema authority; Rust DTOs are generated or schema-checked mirrors. `packages/protocol` owns the stub RPC wire schemas (`packages/protocol/src/stub.ts`) while `packages/stub-client` owns the port interface, the typed errors and the dialect contract. `packages/sandbox` and `packages/stub-client` depend on protocol contracts, not each other; the CLI composes them.
 
 `packages/kernel` is the only module that builds a system prompt (`role: "system"` message) or assembles a `ModelRequest`; nothing else appends to it (LR-FR-037). Assembly is a pure function of a `SessionView`, resolved config, and a caller-supplied environment/instruction-file snapshot — no clock or filesystem read inside it, so the same input always produces the same request. Instruction-file content enters by reference to its content hash via the `prompt` journal entry kind (protocol's eleventh, added in LRN-09; §7 of the blueprint only fixed ten).
 
@@ -61,7 +61,7 @@ The kernel owns the typed turn state machine and its narrow `JournalSink` port; 
 
 `packages/cli` is the composition root for kernel, providers, storage, and session. `runCli` is async and receives all process-adjacent dependencies through `CliDeps`: streams/output, environment/cwd/host, clock, UUIDv7 factory, settings loader, and provider factory; only `src/om.ts` touches `process`. After every turn the CLI re-reads and materializes the journal before the next prompt. Its journal-sink tee emits the exact appended records in `--json` mode; provisional text/thinking deltas are human-mode only. Storage owns `listSessions` so CLI source performs no direct filesystem I/O.
 
-Field naming: the journal is a wire format, so its fields are snake_case (`turn_id`, `call_id`, `risk_class`) to mirror the Rust DTOs in M4, where snake_case is idiomatic. TypeScript-internal state (LRN-04's config: `baseUrl`) stays camelCase.
+Field naming: the journal is a wire format, so its fields are snake_case (`turn_id`, `call_id`, `risk_class`) to mirror the Rust DTOs in M4, where snake_case is idiomatic. The stub RPC envelope and frame are camelCase (`maxBytes`, `maxMs`, `elapsedMs`) per blueprint §8.2. TypeScript-internal state (LRN-04's config: `baseUrl`) stays camelCase.
 
 Journal append assigns identity/sequence and fsyncs every record before resolving. Readers verify the entire file before sequence filtering. Only an unterminated final fragment is automatically repairable: preserve the original, then atomically publish the verified prefix plus a repair entry. Terminated corruption and incompatible versions block writes. Journal files live at `<OM_HOME>/sessions/<project-hash>/<UUIDv7>.jsonl`; metadata comes from `session_start`.
 

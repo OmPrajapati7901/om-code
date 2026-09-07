@@ -407,6 +407,8 @@ every response ends `{status, bytes, truncated, elapsedMs}`.
 | `glob` · `grep` | ripgrep engine, ignore-aware |
 | `batch` | Ordered ops in one round trip, stopping at first failure with per-op results |
 
+The regex/glob dialect and path-canonicalization clauses (AC-12.6) are part of this port contract and live with it in `packages/stub-client` (`dialect.ts`); the wire schemas live in `packages/protocol/src/stub.ts`.
+
 Deferred: `patch`, `script`, `watch`, `job/*`. Add them when a requirement needs them, not before.
 
 ### 8.3 The two interfaces to freeze early
