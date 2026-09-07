@@ -20,3 +20,9 @@ export type CompletedToIdle = Transition<"completed", "idle">;
 export type FailedToCompleted = Transition<"failed", "completed">;
 // @ts-expect-error interrupted is terminal
 export type InterruptedToIdle = Transition<"interrupted", "idle">;
+// @ts-expect-error executing_tools loops back to context, never yields directly
+export type ExecutingToYield = Transition<"executing_tools", "yield_candidate">;
+// @ts-expect-error executing_tools never completes without another inference
+export type ExecutingToCompleted = Transition<"executing_tools", "completed">;
+// @ts-expect-error a yield candidate carries no tool calls to execute
+export type YieldToExecuting = Transition<"yield_candidate", "executing_tools">;

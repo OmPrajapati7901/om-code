@@ -1,4 +1,4 @@
-import type { ErrorEntry, ModelResponse, Usage } from "@om-code/protocol";
+import type { CompleteToolCall, ErrorEntry, ModelResponse, Usage } from "@om-code/protocol";
 import type { SessionView } from "@om-code/session";
 import type { AssembledPrompt } from "./prompt.js";
 
@@ -19,6 +19,12 @@ export type TurnState =
     }
   | { readonly phase: "yield_candidate"; readonly turnId: string; readonly response: ModelResponse }
   | {
+      readonly phase: "executing_tools";
+      readonly turnId: string;
+      readonly response: ModelResponse;
+      readonly calls: readonly CompleteToolCall[];
+    }
+  | {
       readonly phase: "completed";
       readonly turnId: string;
       readonly response: ModelResponse;
@@ -37,7 +43,8 @@ type Successors = {
   idle: "building_context";
   building_context: "waiting_for_model" | "failed";
   waiting_for_model: "streaming_model" | "failed" | "interrupted";
-  streaming_model: "yield_candidate" | "failed" | "interrupted";
+  streaming_model: "yield_candidate" | "executing_tools" | "failed" | "interrupted";
+  executing_tools: "building_context" | "failed" | "interrupted";
   yield_candidate: "completed";
   completed: never;
   failed: never;

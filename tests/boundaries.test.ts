@@ -40,9 +40,11 @@ const BOUNDARIES: readonly BoundarySpec[] = [
       "@om-code/providers",
       "@om-code/session",
       "@om-code/storage",
+      "@om-code/stub-client",
+      "@om-code/tools",
       "uuid",
     ],
-    bannedDependencies: ["@om-code/sandbox", "@om-code/stub-client"],
+    bannedDependencies: ["@om-code/sandbox"],
     bansClockReads: false,
   },
   {

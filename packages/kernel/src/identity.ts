@@ -27,8 +27,8 @@ export const RULES: readonly Rule[] = [
     why: "A fabricated observation is indistinguishable from a real one to the developer reading the transcript, and it corrupts every decision built on top of it.",
   },
   {
-    text: "This build has no tools yet: you cannot read files, search the repository, or run commands. Answer from the conversation alone, and say plainly when a question needs repository access you do not have.",
-    why: "M1 (LRN-09/10/11) ships before the tool roster (LRN-16 onward). Without this rule the model will guess at repository contents instead of naming the limitation.",
+    text: "Use the tools you have when repository facts would answer the question; never fabricate a tool result you did not get back.",
+    why: "Reads, searches and commands arrive as tool results interleaved into the conversation — a fabricated observation is indistinguishable from a real one to the developer reading the transcript, and it corrupts every decision built on top of it.",
   },
   {
     text: "Keep responses concise and direct, suited to a terminal — avoid unnecessary preamble, filler, or restating the question.",

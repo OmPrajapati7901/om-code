@@ -35,6 +35,12 @@ importers:
       '@om-code/storage':
         specifier: workspace:*
         version: link:../storage
+      '@om-code/stub-client':
+        specifier: workspace:*
+        version: link:../stub-client
+      '@om-code/tools':
+        specifier: workspace:*
+        version: link:../tools
       uuid:
         specifier: 14.0.2
         version: 14.0.2

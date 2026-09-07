@@ -1,0 +1,179 @@
+/**
+ * LRN-18 A5 failure table: every failure returns a failed outcome, never throws.
+ */
+import type { CompleteToolCall, ToolCall } from "@om-code/protocol";
+import { createRegistry, type Tool, type ToolIo } from "@om-code/tools";
+import { describe, expect, it } from "vitest";
+import { createToolRunner } from "../src/tool-runner.js";
+
+function unusedIo(): ToolIo {
+  const unused = (): never => {
+    throw new Error("unused io");
+  };
+  return {
+    read: (_params, _signal) => unused(),
+    write: (_params, _signal) => unused(),
+    stat: (_params, _signal) => unused(),
+    glob: (_params, _signal) => unused(),
+    grep: (_params, _signal) => unused(),
+    exec: (_params, _signal) => unused(),
+    shell: (_params, _signal) => unused(),
+  };
+}
+
+function callFor(name: string, argsRaw: string, callId = "c1"): CompleteToolCall {
+  return { index: 0, call_id: callId, name, arguments_raw: argsRaw };
+}
+
+function depsFor(registry: ReturnType<typeof createRegistry>) {
+  const recorded: ToolCall[] = [];
+  const runner = createToolRunner({
+    registry,
+    io: unusedIo(),
+    cwd: "/repo",
+    envAllowlist: [],
+    budget: { maxBytes: 4096, maxMs: 5000 },
+  });
+  return { runner, recorded };
+}
+
+function fakeTool(overrides: Partial<Tool> & { name?: "read" | "grep" | "glob" }): Tool {
+  const name = overrides.name ?? "read";
+  return {
+    descriptor: () => ({
+      name,
+      version: "0.1.0",
+      description: "fake",
+      risk_class: "read",
+      parameters: {},
+    }),
+    plan: async () => ({ risk_class: "read" }),
+    execute: async function* () {
+      yield {
+        type: "end",
+        result: { status: "ok", preview: "fine", bytes: 4, truncated: false },
+      };
+    },
+    ...overrides,
+  } as Tool;
+}
+
+describe("createToolRunner (LRN-18 A5)", () => {
+  it("returns an error naming the unknown tool without journaling a tool_call", async () => {
+    const { runner, recorded } = depsFor(createRegistry([fakeTool({})]));
+    const outcome = await runner.run(callFor("grep", "{}"), {
+      record: async (entry) => {
+        recorded.push(entry);
+      },
+      signal: new AbortController().signal,
+    });
+    expect(outcome).toMatchObject({ status: "error" });
+    expect(outcome.preview).toMatch(/unknown tool "grep"/);
+    expect(recorded).toHaveLength(0);
+  });
+
+  it("returns a parse error echoing the raw arguments without journaling", async () => {
+    const { runner, recorded } = depsFor(createRegistry([fakeTool({})]));
+    const outcome = await runner.run(callFor("read", "{not json"), {
+      record: async (entry) => {
+        recorded.push(entry);
+      },
+      signal: new AbortController().signal,
+    });
+    expect(outcome.status).toBe("error");
+    expect(outcome.preview).toMatch(/invalid JSON/);
+    expect(outcome.preview).toContain("{not json");
+    expect(recorded).toHaveLength(0);
+  });
+
+  it("returns an error without a tool_call when plan() rejects", async () => {
+    const rejecting = fakeTool({
+      plan: async () => {
+        throw new Error("no capability");
+      },
+    });
+    const { runner, recorded } = depsFor(createRegistry([rejecting]));
+    const outcome = await runner.run(callFor("read", "{}"), {
+      record: async (entry) => {
+        recorded.push(entry);
+      },
+      signal: new AbortController().signal,
+    });
+    expect(outcome.status).toBe("error");
+    expect(outcome.preview).toMatch(/no capability/);
+    expect(recorded).toHaveLength(0);
+  });
+
+  it("returns an error without a tool_call when input fails validation", async () => {
+    // Real read tool: missing `path` fails its Zod schema as invalid-input.
+    const { readOnlyTools } = await import("@om-code/tools");
+    const { runner, recorded } = depsFor(createRegistry(readOnlyTools()));
+    const outcome = await runner.run(callFor("read", "{}"), {
+      record: async (entry) => {
+        recorded.push(entry);
+      },
+      signal: new AbortController().signal,
+    });
+    expect(outcome.status).toBe("error");
+    expect(recorded).toHaveLength(0);
+  });
+
+  it("journals the tool_call before surfacing an execute() throw", async () => {
+    const throwing = fakeTool({
+      execute: async function* () {
+        yield { type: "output", text: "partial" };
+        throw new Error("stub exploded");
+      },
+    });
+    const { runner, recorded } = depsFor(createRegistry([throwing]));
+    const outcome = await runner.run(callFor("read", "{}"), {
+      record: async (entry) => {
+        recorded.push(entry);
+      },
+      signal: new AbortController().signal,
+    });
+    expect(outcome).toMatchObject({ status: "error" });
+    expect(outcome.preview).toContain("stub exploded");
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0]).toMatchObject({ kind: "tool_call", call_id: "c1" });
+  });
+
+  it("reports a protocol violation when the generator ends without an end event", async () => {
+    const noEnd = fakeTool({
+      execute: async function* () {
+        yield { type: "output", text: "only output" };
+      },
+    });
+    const { runner } = depsFor(createRegistry([noEnd]));
+    const outcome = await runner.run(callFor("read", "{}"), {
+      record: async () => {},
+      signal: new AbortController().signal,
+    });
+    expect(outcome.status).toBe("error");
+    expect(outcome.preview).toMatch(/without an end event/);
+  });
+
+  it("returns the end event's result verbatim and discards output events", async () => {
+    const expected = {
+      status: "ok" as const,
+      preview: "the preview",
+      bytes: 11,
+      truncated: true,
+    };
+    const verbatim = fakeTool({
+      execute: async function* () {
+        yield { type: "output", text: "the preview" };
+        yield { type: "end", result: expected };
+      },
+    });
+    const { runner, recorded } = depsFor(createRegistry([verbatim]));
+    const outcome = await runner.run(callFor("read", "{}"), {
+      record: async (entry) => {
+        recorded.push(entry);
+      },
+      signal: new AbortController().signal,
+    });
+    expect(outcome).toEqual(expected);
+    expect(recorded).toHaveLength(1);
+  });
+});

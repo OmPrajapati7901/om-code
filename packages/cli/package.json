@@ -26,6 +26,8 @@
     "@om-code/providers": "workspace:*",
     "@om-code/session": "workspace:*",
     "@om-code/storage": "workspace:*",
+    "@om-code/stub-client": "workspace:*",
+    "@om-code/tools": "workspace:*",
     "uuid": "14.0.2"
   },
   "devDependencies": {

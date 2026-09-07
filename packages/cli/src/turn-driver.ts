@@ -1,5 +1,5 @@
-import { type Environment, type JournalSink, runTurn } from "@om-code/kernel";
-import type { ModelProvider } from "@om-code/protocol";
+import { type Environment, type JournalSink, runTurn, type ToolRunner } from "@om-code/kernel";
+import type { ModelProvider, ModelTool } from "@om-code/protocol";
 import type { SessionView } from "@om-code/session";
 import { EXIT, type ExitCode } from "./exit.js";
 import { prefixedError } from "./render.js";
@@ -21,6 +21,8 @@ export type DriveTurnInput = {
   readonly environment: Environment;
   readonly io: CliIo;
   readonly json: boolean;
+  readonly modelTools?: readonly ModelTool[];
+  readonly toolRunner?: ToolRunner | undefined;
 };
 
 export async function driveTurn(input: DriveTurnInput): Promise<DrivenTurn> {
@@ -36,7 +38,8 @@ export async function driveTurn(input: DriveTurnInput): Promise<DrivenTurn> {
     model: input.model,
     environment: input.environment,
     instructions: [],
-    tools: [],
+    tools: input.modelTools ?? [],
+    toolRunner: input.toolRunner,
   })) {
     if (event.type === "text_delta" && !input.json) {
       input.io.write(event.text);
@@ -44,6 +47,18 @@ export async function driveTurn(input: DriveTurnInput): Promise<DrivenTurn> {
     } else if (event.type === "thinking_delta" && !input.json && input.io.isTty) {
       input.io.write(`\u001b[2m${event.text}\u001b[22m`);
       renderedText = true;
+    } else if (event.type === "tool_call" && !input.json) {
+      if (renderedText) {
+        input.io.write("\n");
+        renderedText = false;
+      }
+      input.io.write(`⏺ ${event.call.name}(${event.call.arguments_raw})\n`);
+    } else if (event.type === "tool_result" && !input.json) {
+      const firstLine = event.result.preview.split("\n", 1)[0] ?? "";
+      const summary = firstLine.length > 120 ? `${firstLine.slice(0, 117)}...` : firstLine;
+      input.io.write(
+        `  ⎿ ${event.call_id} ${event.result.status}${summary.length > 0 ? ` — ${summary}` : ""}\n`,
+      );
     } else if (event.type === "turn_end") {
       if (!input.json && renderedText) input.io.write("\n");
       if (event.state.phase === "failed") {

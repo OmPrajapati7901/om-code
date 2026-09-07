@@ -2,7 +2,7 @@
 import { appendFile, mkdir, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { assemblePrompt, type JournalSink, runTurn } from "@om-code/kernel";
+import { assemblePrompt, type JournalSink, runTurn, type ToolRunner } from "@om-code/kernel";
 import { type Entry, type ModelResponse, ProviderError } from "@om-code/protocol";
 import { FakeProvider, OpenAICompatibleProvider } from "@om-code/providers";
 import { materialize } from "@om-code/session";
@@ -453,4 +453,124 @@ it("keeps adapter credentials out of journals, repair backups, fixtures and erro
     new URL("../packages/providers/tests/fixtures", import.meta.url).pathname,
     sentinel,
   );
+});
+
+it("AC-18.1/18.3 journals a multi-tool turn that re-assembles after disk readback", async () => {
+  const loc = await location();
+  const writer = await JournalWriter.open(loc);
+  const start = await writer.append(sessionStartEntry(loc.sessionId, loc.projectRoot), {
+    by: "system",
+  });
+  const toolRunner: ToolRunner = {
+    run: async (call, deps) => {
+      await deps.record({
+        kind: "tool_call",
+        schemaVersion: 1,
+        call_id: call.call_id,
+        tool: call.name,
+        input: {},
+        capability: { risk_class: "read" },
+      });
+      return {
+        status: "ok",
+        preview: `preview for ${call.call_id}`,
+        bytes: 12,
+        truncated: false,
+      };
+    },
+  };
+  for await (const _event of runTurn({
+    session: materialize([start]),
+    text: "where is auth handled?",
+    provider: new FakeProvider({
+      turns: [
+        {
+          kind: "stream",
+          deltas: [
+            {
+              tool: {
+                index: 0,
+                call_id: "c1",
+                name: "read",
+                arguments: '{"path":"a.ts"}',
+              },
+            },
+            {
+              tool: {
+                index: 1,
+                call_id: "c2",
+                name: "grep",
+                arguments: '{"pattern":"auth"}',
+              },
+            },
+          ],
+        },
+        { kind: "stream", deltas: [{ text: "auth lives in a.ts" }] },
+      ],
+    }),
+    journal: writer,
+    newTurnId: () => "turn-tools",
+    signal: new AbortController().signal,
+    model: "fixture",
+    environment: {
+      cwd: loc.projectRoot,
+      projectRoot: loc.projectRoot,
+      os: "darwin/arm64",
+      date: "2026-09-06",
+    },
+    instructions: [],
+    tools: [
+      { name: "read", description: "read", parameters: {} },
+      { name: "grep", description: "grep", parameters: {} },
+    ],
+    toolRunner,
+  })) {
+    // Drain so every record commits.
+  }
+  await writer.close();
+
+  const records = (await new JournalReader(loc).readAll(loc.sessionId)).records;
+  const view = materialize(records);
+  expect(view.toolCalls.map((entry) => entry.call_id).sort()).toEqual(["c1", "c2"]);
+  expect(view.toolResults.map((entry) => entry.call_id).sort()).toEqual(["c1", "c2"]);
+  expect(view.pendingCallIds).toEqual([]);
+  const callSeq = new Map(
+    records
+      .filter((r) => r.entry.kind === "tool_call")
+      .map((r) => [r.entry.kind === "tool_call" ? r.entry.call_id : "", r.seq]),
+  );
+  const resultSeq = new Map(
+    records
+      .filter((r) => r.entry.kind === "tool_result")
+      .map((r) => [r.entry.kind === "tool_result" ? r.entry.call_id : "", r.seq]),
+  );
+  for (const id of ["c1", "c2"]) {
+    expect(callSeq.get(id)).toBeLessThan(resultSeq.get(id) ?? 0);
+  }
+
+  const environment = {
+    cwd: loc.projectRoot,
+    projectRoot: loc.projectRoot,
+    os: "darwin/arm64",
+    date: "2026-09-06",
+  };
+  const first = assemblePrompt({
+    session: view,
+    model: "fixture",
+    environment,
+    instructions: [],
+    tools: [],
+  });
+  const second = assemblePrompt({
+    session: materialize((await new JournalReader(loc).readAll(loc.sessionId)).records),
+    model: "fixture",
+    environment,
+    instructions: [],
+    tools: [],
+  });
+  expect(second.request.messages).toEqual(first.request.messages);
+  const toolMessages = first.request.messages.filter((message) => message.role === "tool");
+  expect(toolMessages).toHaveLength(2);
+  expect(toolMessages[0]).toMatchObject({ call_id: "c1", content: "preview for c1" });
+  expect(toolMessages[1]).toMatchObject({ call_id: "c2", content: "preview for c2" });
 });

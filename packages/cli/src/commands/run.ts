@@ -7,10 +7,13 @@ import {
   requireComplete,
   resolveOmHome,
 } from "@om-code/storage";
+import { createLocalDriver } from "@om-code/stub-client";
+import { createRegistry, readOnlyTools, toModelTool } from "@om-code/tools";
 import { booleanFlag, type FlagDefinition, parseArgs, stringFlag } from "../args.js";
 import { buildEnvironment } from "../environment.js";
 import { runRepl } from "../repl.js";
 import { bootstrapSession } from "../session-bootstrap.js";
+import { createToolRunner } from "../tool-runner.js";
 import { driveTurn } from "../turn-driver.js";
 import type { CliDeps, CliResult } from "../types.js";
 
@@ -83,6 +86,19 @@ export async function runCommand(argv: readonly string[], deps: CliDeps): Promis
     onRecord: emitRecord,
   });
   let view: SessionView = bootstrapped.view;
+  // LRN-19 takes ownership of these numbers; the interim budget below only
+  // lets LRN-18's tools run behind the same envelope the stub enforces.
+  const INTERIM_BUDGET = { maxBytes: 64 * 1024, maxMs: 30_000 };
+  const stub = createLocalDriver({ root: location.projectRoot });
+  const registry = createRegistry(readOnlyTools());
+  const toolRunner = createToolRunner({
+    registry,
+    io: stub,
+    cwd: deps.cwd,
+    envAllowlist: [],
+    budget: INTERIM_BUDGET,
+  });
+  const modelTools = registry.descriptors().map(toModelTool);
   const runOne = async (text: string, signal: AbortSignal) => {
     const result = await driveTurn({
       session: view,
@@ -95,6 +111,8 @@ export async function runCommand(argv: readonly string[], deps: CliDeps): Promis
       environment,
       io: deps.io,
       json,
+      modelTools,
+      toolRunner,
     });
     view = materialize((await new JournalReader(location).readAll(sessionId)).records);
     return result;

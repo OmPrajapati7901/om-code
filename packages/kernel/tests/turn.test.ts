@@ -253,7 +253,7 @@ it("treats an aborted provider call as interrupted rather than failed", async ()
   expect(events.at(-1)).toMatchObject({ type: "turn_end", state: { phase: "interrupted" } });
 });
 
-it("journals PromptError as a local failure", async () => {
+it("accepts a session that already carries tool history (LRN-18 interleaves it)", async () => {
   const session = readySession();
   session.toolCalls.push({
     kind: "tool_call",
@@ -268,15 +268,11 @@ it("journals PromptError as a local failure", async () => {
 
   expect(journal.appends.map(({ entry }) => entry.kind)).toEqual([
     "user_message",
-    "error",
+    "prompt",
+    "assistant_message",
     "turn_end",
   ]);
-  expect(journal.appends[1]?.entry).toMatchObject({
-    source: "local",
-    reason: "unsupported-entry",
-    retryable: false,
-  });
-  expect(events.at(-1)).toMatchObject({ type: "turn_end", state: { phase: "failed" } });
+  expect(events.at(-1)).toMatchObject({ type: "turn_end", state: { phase: "completed" } });
 });
 
 it("fails locally when session_start metadata is absent", async () => {

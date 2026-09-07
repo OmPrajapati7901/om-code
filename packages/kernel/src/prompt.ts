@@ -14,10 +14,12 @@
 
 import type {
   AssistantMessage,
+  CompleteToolCall,
   FileSnapshot,
   ModelMessage,
   ModelRequest,
   ModelTool,
+  ToolResult,
   UserMessage,
 } from "@om-code/protocol";
 import type { SessionView } from "@om-code/session";
@@ -87,54 +89,110 @@ function renderInstructionsSection(files: readonly InstructionFile[]): string {
 
 function assistantText(entry: AssistantMessage): string {
   if (entry.schemaVersion === 1) {
-    if (entry.content.some((block) => block.type === "tool_use")) {
-      throw new PromptError(
-        "unsupported-entry",
-        "assistant_message v1 carries a tool_use block; interleaving tool " +
-          "results into the conversation is LRN-18's job, not LRN-09's.",
-      );
-    }
     return entry.content
       .filter((block) => block.type === "text")
       .map((block) => block.text)
       .join("");
   }
-  // v2: tool_calls that actually completed need their tool results
-  // interleaved (role: "tool" messages) before the model can see them
-  // again — that mapping is LRN-18. An interrupted stream's tool_calls
-  // never executed, so they carry no result to interleave and are safely
-  // dropped; only their text contributes.
-  if (entry.outcome.kind === "complete" && entry.tool_calls.length > 0) {
-    throw new PromptError(
-      "unsupported-entry",
-      "assistant_message v2 carries completed tool_calls; interleaving " +
-        "tool results into the conversation is LRN-18's job, not LRN-09's.",
-    );
-  }
+  // v2: an interrupted stream's tool_calls never executed, so they carry no
+  // result to interleave and are safely dropped; only their text contributes.
+  // A completed outcome's tool_calls are rendered by toModelMessages alongside
+  // their tool results — this helper contributes the text half only.
   return entry.content
     .filter((block) => block.type === "text")
     .map((block) => block.text)
     .join("");
 }
 
+/**
+ * Completed v2 calls always carry `call_id` and `name` — enforced by
+ * `validateCalls` (protocol/src/model.ts) — so this narrowing is sound.
+ */
+function completeCallsOf(
+  entry: Extract<AssistantMessage, { schemaVersion: 2 }>,
+): CompleteToolCall[] {
+  return entry.tool_calls as CompleteToolCall[];
+}
+
+function v1CallsOf(entry: Extract<AssistantMessage, { schemaVersion: 1 }>): CompleteToolCall[] {
+  return entry.content
+    .filter((block) => block.type === "tool_use")
+    .map((block, index) => ({
+      index,
+      call_id: block.call_id,
+      name: block.tool,
+      arguments_raw: JSON.stringify(block.input),
+    }));
+}
+
+function toolContent(result: ToolResult | undefined, callId: string): string {
+  if (result !== undefined) return result.preview;
+  // A pending call has no ToolResult yet. Every assistant `tool_calls` entry
+  // still needs a matching `role: "tool"` message — an OpenAI-compatible
+  // endpoint rejects the dangling assistant entry without one. Real
+  // reconciliation (retry, re-issue, or explicit failure) is D-10 / LRN-29's
+  // job; here we name the unknown outcome so the model can see the gap.
+  return `[om: no result recorded yet for tool call ${callId}; outcome unknown]`;
+}
+
+function interleaveCalls(
+  text: string,
+  calls: readonly CompleteToolCall[],
+  resultsByCallId: ReadonlyMap<string, ToolResult>,
+): ModelMessage[] {
+  const ordered = [...calls].sort((a, b) => a.index - b.index);
+  const messages: ModelMessage[] = [{ role: "assistant", content: text, tool_calls: ordered }];
+  for (const call of ordered) {
+    messages.push({
+      role: "tool",
+      call_id: call.call_id,
+      content: toolContent(resultsByCallId.get(call.call_id), call.call_id),
+    });
+  }
+  return messages;
+}
+
 function toModelMessages(session: SessionView): ModelMessage[] {
-  if (session.toolCalls.length > 0 || session.toolResults.length > 0) {
-    throw new PromptError(
-      "unsupported-entry",
-      "session has tool_call/tool_result entries; interleaving them into " +
-        "the conversation is LRN-18's job, not LRN-09's.",
-    );
+  // toolCalls/toolResults live as parallel flat arrays with no per-entry seq,
+  // so placement is reconstructed by walking the conversation in array order
+  // and joining each assistant call to its result by call_id. A tool_result
+  // whose call_id matches no assistant call is skipped: it cannot be placed
+  // in the message stream, and inventing a placement would corrupt ordering.
+  const resultsByCallId = new Map<string, ToolResult>();
+  for (const result of session.toolResults) {
+    if (!resultsByCallId.has(result.call_id)) resultsByCallId.set(result.call_id, result);
   }
   const hasUserMessage = session.conversation.some((entry) => entry.kind === "user_message");
   if (!hasUserMessage) {
     throw new PromptError("no-user-message", "conversation has no user message to answer");
   }
-  return session.conversation.map((entry): ModelMessage => {
+  const messages: ModelMessage[] = [];
+  for (const entry of session.conversation) {
     if (entry.kind === "user_message") {
-      return { role: "user", content: (entry as UserMessage).text };
+      messages.push({ role: "user", content: (entry as UserMessage).text });
+      continue;
     }
-    return { role: "assistant", content: assistantText(entry) };
-  });
+    const text = assistantText(entry);
+    if (entry.schemaVersion === 2) {
+      if (entry.outcome.kind === "interrupted") {
+        messages.push({ role: "assistant", content: text });
+        continue;
+      }
+      if (entry.tool_calls.length > 0) {
+        messages.push(...interleaveCalls(text, completeCallsOf(entry), resultsByCallId));
+        continue;
+      }
+      messages.push({ role: "assistant", content: text });
+      continue;
+    }
+    const v1Calls = v1CallsOf(entry);
+    if (v1Calls.length > 0) {
+      messages.push(...interleaveCalls(text, v1Calls, resultsByCallId));
+      continue;
+    }
+    messages.push({ role: "assistant", content: text });
+  }
+  return messages;
 }
 
 export function assemblePrompt(input: PromptInput): AssembledPrompt {

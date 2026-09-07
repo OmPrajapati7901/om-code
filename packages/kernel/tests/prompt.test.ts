@@ -140,48 +140,90 @@ describe("assemblePrompt", () => {
     expect(assembled.request.tools).toBeUndefined();
   });
 
-  describe("failure paths (DoD-2)", () => {
-    it("throws naming LRN-18 when the snapshot has a v1 tool_use block", () => {
-      expect(() =>
-        assemblePrompt(
-          fixedInput({
-            session: baseSession([
-              userMessage("go"),
-              {
-                kind: "assistant_message",
-                schemaVersion: 1,
-                content: [
-                  { type: "tool_use", call_id: "call_1", tool: "grep", input: { pattern: "x" } },
-                ],
-                usage: { kind: "unknown" },
-              },
-            ]),
-          }),
-        ),
-      ).toThrow(/LRN-18/);
+  describe("tool interleaving (LRN-18)", () => {
+    it("interleaves a v1 tool_use block with its tool result", () => {
+      const session = baseSession([
+        userMessage("go"),
+        {
+          kind: "assistant_message",
+          schemaVersion: 1,
+          content: [
+            { type: "text", text: "searching" },
+            { type: "tool_use", call_id: "call_1", tool: "grep", input: { pattern: "x" } },
+          ],
+          usage: { kind: "unknown" },
+        },
+      ]);
+      session.toolResults.push({
+        kind: "tool_result",
+        schemaVersion: 1,
+        call_id: "call_1",
+        preview: "match in a.ts",
+        bytes: 14,
+        truncated: false,
+        status: "ok",
+      });
+      const assembled = assemblePrompt(fixedInput({ session }));
+      expect(assembled.request.messages).toEqual([
+        expect.objectContaining({ role: "system" }),
+        { role: "user", content: "go" },
+        {
+          role: "assistant",
+          content: "searching",
+          tool_calls: [
+            { index: 0, call_id: "call_1", name: "grep", arguments_raw: '{"pattern":"x"}' },
+          ],
+        },
+        { role: "tool", call_id: "call_1", content: "match in a.ts" },
+      ]);
     });
 
-    it("throws naming LRN-18 when a v2 assistant message completed with tool_calls", () => {
-      expect(() =>
-        assemblePrompt(
-          fixedInput({
-            session: baseSession([
-              userMessage("go"),
-              {
-                kind: "assistant_message",
-                schemaVersion: 2,
-                content: [],
-                tool_calls: [{ index: 0, call_id: "call_1", name: "grep", arguments_raw: "{}" }],
-                usage: { kind: "unknown" },
-                outcome: { kind: "complete" },
-              },
-            ]),
-          }),
-        ),
-      ).toThrow(/LRN-18/);
+    it("interleaves a completed v2 assistant's tool_calls with results in index order", () => {
+      const session = baseSession([
+        userMessage("go"),
+        {
+          kind: "assistant_message",
+          schemaVersion: 2,
+          content: [{ type: "text", text: "working" }],
+          tool_calls: [
+            { index: 1, call_id: "call_2", name: "read", arguments_raw: "{}" },
+            { index: 0, call_id: "call_1", name: "grep", arguments_raw: "{}" },
+          ],
+          usage: { kind: "unknown" },
+          outcome: { kind: "complete" },
+        },
+      ]);
+      session.toolResults.push(
+        {
+          kind: "tool_result",
+          schemaVersion: 1,
+          call_id: "call_1",
+          preview: "first",
+          bytes: 5,
+          truncated: false,
+          status: "ok",
+        },
+        {
+          kind: "tool_result",
+          schemaVersion: 1,
+          call_id: "call_2",
+          preview: "second",
+          bytes: 6,
+          truncated: false,
+          status: "ok",
+        },
+      );
+      const assembled = assemblePrompt(fixedInput({ session }));
+      const messages = assembled.request.messages;
+      expect(messages[2]).toMatchObject({
+        role: "assistant",
+        tool_calls: [{ call_id: "call_1" }, { call_id: "call_2" }],
+      });
+      expect(messages[3]).toEqual({ role: "tool", call_id: "call_1", content: "first" });
+      expect(messages[4]).toEqual({ role: "tool", call_id: "call_2", content: "second" });
     });
 
-    it("throws naming LRN-18 when the session carries separate tool_call/tool_result entries", () => {
+    it("skips a tool_result that matches no assistant call", () => {
       const session = baseSession([userMessage("go"), assistantTextV2("ok")]);
       session.toolCalls.push({
         kind: "tool_call",
@@ -191,9 +233,70 @@ describe("assemblePrompt", () => {
         input: {},
         capability: { filesystem: { read: [], write: [] }, risk_class: "read" },
       });
-      expect(() => assemblePrompt(fixedInput({ session }))).toThrow(/LRN-18/);
+      session.toolResults.push({
+        kind: "tool_result",
+        schemaVersion: 1,
+        call_id: "call_1",
+        preview: "orphan",
+        bytes: 6,
+        truncated: false,
+        status: "ok",
+      });
+      const assembled = assemblePrompt(fixedInput({ session }));
+      expect(assembled.request.messages.filter((message) => message.role === "tool")).toHaveLength(
+        0,
+      );
+      expect(assembled.request.messages).toHaveLength(3);
     });
 
+    it("emits a synthesized tool message for a pending call with no result", () => {
+      const session = baseSession([
+        userMessage("go"),
+        {
+          kind: "assistant_message",
+          schemaVersion: 2,
+          content: [],
+          tool_calls: [{ index: 0, call_id: "call_1", name: "grep", arguments_raw: "{}" }],
+          usage: { kind: "unknown" },
+          outcome: { kind: "complete" },
+        },
+      ]);
+      session.pendingCallIds.push("call_1");
+      const assembled = assemblePrompt(fixedInput({ session }));
+      const toolMessage = assembled.request.messages.find((message) => message.role === "tool");
+      expect(toolMessage).toMatchObject({ role: "tool", call_id: "call_1" });
+      if (toolMessage?.role === "tool") {
+        expect(toolMessage.content).toMatch(/no result recorded yet.*call_1/);
+      }
+    });
+
+    it("drops tool_calls from an interrupted v2 without requiring a tool message", () => {
+      const assembled = assemblePrompt(
+        fixedInput({
+          session: baseSession([
+            userMessage("go"),
+            {
+              kind: "assistant_message",
+              schemaVersion: 2,
+              content: [{ type: "text", text: "partial" }],
+              tool_calls: [{ index: 0, arguments_raw: "" }],
+              usage: { kind: "unknown" },
+              outcome: { kind: "interrupted", reason: "disconnected" },
+            },
+          ]),
+        }),
+      );
+      expect(assembled.request.messages.filter((message) => message.role === "tool")).toHaveLength(
+        0,
+      );
+      expect(assembled.request.messages[2]).toMatchObject({
+        role: "assistant",
+        content: "partial",
+      });
+    });
+  });
+
+  describe("failure paths (DoD-2)", () => {
     it("throws when there is no user message to answer", () => {
       expect(() =>
         assemblePrompt(fixedInput({ session: baseSession([assistantTextV1("hello?")]) })),
