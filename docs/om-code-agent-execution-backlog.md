@@ -135,6 +135,7 @@ answers, writes a journal, and `om show` reads it back. No tools yet.
 - **AC-5.5 (MUST)** Reading a record with an **unrecognized entry kind** preserves it verbatim rather than dropping or rejecting it; reading an **unknown `schemaVersion`** produces a clear typed error naming the version.
 - **AC-5.6 (MUST)** `packages/protocol` imports nothing from any other workspace package — asserted by `dependency-cruiser`.
 - **AC-5.7 (SHOULD)** Ambiguities found while writing schemas are listed in the commit body rather than resolved silently.
+- **AC-5.8 (MUST, follow-up — not yet satisfied)** A canonical-JSON golden-vector fixture is committed: a handful of representative entries with their expected canonical bytes (per `canonical.ts`'s RFC 8785 encoding) and expected `sha256`. LRN-30's Rust side (AC-30.8, [ADR-025](adr/ADR-025-buy-solved-subsystems.md)) verifies against this fixture instead of discovering a cross-language canonicalization mismatch live in M4. **This task is `completed` without this criterion** — DoD-8 applies: land it as a small dedicated commit before LRN-30 starts, referencing this AC and X-15, rather than reopening LRN-05's status.
 
 **LRN-06/07 implementation decisions (2026-09-06).** Full verification and every-append
 fsync replace tail-only verification/selective commits. The user approved an early native
@@ -223,7 +224,8 @@ behind it for now; M4 replaces it with the sandboxed Rust one without touching a
 | # | Task | Type | Size | Depends | Req | Done when | Status | Comments |
 |---|---|---|---|---|---|---|---|---|
 | **LRN-12** | `packages/stub-client`: the port — typed `health`, `read`, `write`, `stat`, `glob`, `grep`, `exec`, `shell`, `batch`, each taking `{maxBytes, maxMs, cwd, capability}` and returning a terminal `{status, bytes, truncated, elapsedMs}` frame. **Every method in blueprint §8.2, none extra** | Core | M | 05 | LR-FR-007 | The interface is written before any implementation exists; `write`, `shell` and `batch` may throw `NotImplemented` until M3 but are in the type | todo | — |
-| **LRN-13** | The `local-ts` driver behind the port (in `stub-client`): real fs and spawn, **path containment** (canonicalize → verify inside root → open) and byte/time budgets. **Plus the shared driver contract suite** that any driver must pass — the Rust stub reuses it verbatim in LRN-30 | Core | M | 12 | LR-FR-007, LR-FR-008, LR-FR-013 | Containment tests including `../` and a symlink out. The contract suite is a separate exported test module, not inline tests. Adversarial testing is LRN-32 | todo | — |
+| **LRN-13** | The `local-ts` driver behind the port (in `stub-client`): real fs and spawn, **path containment** (canonicalize → verify inside root → open) and byte/time budgets. Search is **delegated to `rg --json`**, not implemented (ADR-025). **Plus the shared driver contract suite** that any driver must pass — the Rust stub reuses it verbatim in LRN-30 | Core | M | 12 | LR-FR-007, LR-FR-008, LR-FR-013 | Containment tests including `../` and a symlink out. The contract suite is a separate exported test module, not inline tests. Adversarial testing is LRN-32 | todo | — |
+| **LRN-13b** | **Sandbox-runtime spike.** One evening, throwaway, LRN-01-shaped: can `@anthropic-ai/sandbox-runtime` wrap a **long-lived** child process, and does it expose the **generated profile text**? Write the answers down and delete the script | Harden | S | 03 | LR-FR-010 | `docs/sandbox-runtime-notes.md` records both answers and a go/no-go. **Do this before M4 starts, not inside it** | todo | — |
 | **LRN-14** | **Boundary lint.** `dependency-cruiser` for dependency direction, plus a rule banning `child_process` and direct fs access anywhere except `stub-client`, `storage` and (later) `native/` | Harden | M | 13 | LR-FR-006 | Two planted violations each fail the lint. **Do this now, while there are three files to fix, not thirty** | todo | — |
 | **LRN-15** | CI: one macOS workflow — install, biome, `tsc --noEmit`, dependency-cruiser, tests | Harden | S | 14 | §11 | Green on push. One OS in the matrix | todo | — |
 | **LRN-16** | `packages/tools`: the `Tool` interface (`descriptor` / `plan` → `CapabilityRequest` / `execute`), the registry, and a test pinning the roster at 7 | Core | M | 12 | LR-FR-015, LR-FR-020 | A tool without `plan()` does not compile; an eighth tool fails a test | todo | — |
@@ -240,19 +242,29 @@ behind it for now; M4 replaces it with the sandboxed Rust one without touching a
 - **AC-12.3 (MUST)** Streaming methods (`read`, `exec`, `shell`, `grep`) return async iterables, not buffered results.
 - **AC-12.4 (MUST)** Methods not yet implemented throw a typed `NotImplemented` naming the milestone that delivers them — they are **present in the type** from now on.
 - **AC-12.5 (MUST)** The interface is committed **before** any implementation exists.
+- **AC-12.6 (MUST) — dialect and canonicalization are part of the contract.** The port declares (a) the **regex subset** `grep` accepts, pinned to what the Rust `regex` crate supports — no backreferences, no lookaround — with unsupported constructs rejected at the boundary as a typed error, and (b) the **path-canonicalization semantics** every driver must produce, naming macOS Unicode normalization (NFC/NFD) and case-insensitivity behaviour explicitly. A test asserts a lookahead pattern is refused rather than silently accepted. **Without this, AC-30.5's "passes the contract suite verbatim" is not satisfiable:** a suite written against JS `RegExp` and Node `realpath` in M2 can pass then and fail against ripgrep and Rust `canonicalize` in M4, and the mismatch would be misdiagnosed as a port leak when it is really an unspecified contract (X-14, [ADR-025](adr/ADR-025-buy-solved-subsystems.md)).
 
 **LRN-13 — `local-ts` driver + shared contract suite**
 - **AC-13.1 (MUST)** The driver resolves every path as: canonicalize → assert inside workspace root → open → **re-verify after open** → act.
 - **AC-13.2 (MUST)** Containment tests cover at minimum: `../` traversal, an absolute path outside the root, a symlink inside the root pointing outside, and a path whose parent is a symlink.
 - **AC-13.3 (MUST)** `maxBytes` truncates the stream and sets `truncated: true`; `maxMs` aborts and reports elapsed time. Both asserted for `read` and `exec`.
 - **AC-13.4 (MUST)** `exec` spawns by program and argv with **no shell interpretation** — a test passes `; rm -rf x` as an argv element and asserts it is treated as a literal argument.
-- **AC-13.5 (MUST)** `glob`/`grep` honour `.gitignore` and the byte budget; results match `rg` on a fixture repo for a defined pattern set.
+- **AC-13.5 (MUST)** `glob`/`grep` honour `.gitignore` and the byte budget; results match `rg` on a fixture repo for a defined pattern set. **Satisfied by delegating to ripgrep rather than reimplementing it** ([ADR-025](adr/ADR-025-buy-solved-subsystems.md)): the driver spawns `rg --json` — legal here, since `stub-client` is one of the modules AC-14.1 permits to spawn — and reads line numbers, byte offsets and submatches from its output, with `--max-filesize` for the byte budget. Parity with `rg` then holds by construction instead of being chased. `rg` on PATH becomes a documented prerequisite and an `om doctor` check (AC-35.1). If an external binary proves unacceptable, the pure-JS fallback is `ignore` + `tinyglobby` — but then AC-12.6's dialect clause is doing load-bearing work and must be tested harder.
 - **AC-13.6 (MUST)** **The driver contract suite is an exported, reusable test module** parameterized over a driver factory — not tests inlined against this implementation. LRN-30 must be able to run it verbatim against the Rust stub.
 - **AC-13.7 (MUST)** The contract suite covers every implemented method's success path, budget path and containment path.
-- **Rejects:** any path resolution that checks before opening and then acts on the name; a contract suite that cannot be pointed at a second driver.
+- **AC-13.8 (MUST)** Every pattern and path the contract suite uses conforms to AC-12.6's declared dialect and canonicalization semantics. A reviewer can check this by reading the suite; a lookahead or a normalization-dependent path in the suite is a defect in the suite, caught here rather than in M4.
+- **Rejects:** any path resolution that checks before opening and then acts on the name; a contract suite that cannot be pointed at a second driver; a contract suite that only one driver's regex engine can satisfy.
+
+**LRN-13b — Sandbox-runtime spike** *(Throwaway code)*
+- **AC-13b.1 (MUST)** It is established, by running it, whether `@anthropic-ai/sandbox-runtime` can wrap a **long-lived child process** under a Seatbelt profile — not only per-command invocations. The stub is a persistent process; if the package only wraps single commands, LRN-33 needs a different shape.
+- **AC-13b.2 (MUST)** It is established whether the package **exposes the generated profile text** to the caller. AC-33.4 requires `health` to report the profile actually in force and the host to verify it matches what it requested; if the profile is generated internally and never surfaced, **AC-33.4 is unimplementable against this package** and that must be known before M4 begins.
+- **AC-13b.3 (MUST)** A **go / no-go** sentence is written. On no-go, name the fallback: generate the `.sb` profile ourselves and invoke `/usr/bin/sandbox-exec` (~100–150 lines; `codex-rs/sandboxing` is Apache-2.0 prior art), which the placement port already makes a driver swap.
+- **AC-13b.4 (MUST)** The exact package version tested is recorded. It is a `0.0.x` release with documented config churn, so the answer has a shelf life.
+- **AC-13b.5 (MUST)** The spike script is **deleted**, not merged.
+- **Completion:** `docs/sandbox-runtime-notes.md` committed; no source code added. Ordered before M4 deliberately — discovering this in LRN-33 costs a milestone, discovering it here costs an evening.
 
 **LRN-14 — Boundary lint**
-- **AC-14.1 (MUST)** Importing `node:child_process`, `node:fs` or `node:fs/promises` anywhere outside `packages/stub-client`, `packages/storage` and `native/` fails the lint.
+- **AC-14.1 (MUST)** Importing `node:child_process`, `node:fs` or `node:fs/promises` anywhere outside `packages/stub-client`, `packages/storage` and `native/` fails the lint. **Implement this with Biome's `noRestrictedImports` plus path-scoped `overrides`**, not with a second tool: Biome is already installed and already in the `check` gate, so the single most important rule in the project then fails in the editor on save rather than only in a separate lint run. `dependency-cruiser` is still required, for AC-14.4.
 - **AC-14.2 (MUST)** A planted violation of each of those two categories is committed as a **fixture that the lint test asserts fails** — then removed from the build.
 - **AC-14.3 (MUST)** `packages/storage` may write only under `~/.om-code/`; a rule or test asserts it never writes a workspace path.
 - **AC-14.4 (MUST)** The dependency direction from blueprint §6 is encoded and violations fail.
@@ -269,7 +281,7 @@ behind it for now; M4 replaces it with the sandboxed Rust one without touching a
 - **AC-16.2 (MUST)** `execute` receives the stub port and has no other I/O capability in scope.
 - **AC-16.3 (MUST)** The registry rejects a duplicate tool name and a name not in the roster of seven.
 - **AC-16.4 (MUST)** A test asserts the registered roster size is exactly 7; registering an eighth fails.
-- **AC-16.5 (MUST)** Each tool's JSON schema is generated from one source shared with its runtime validation — no hand-written second copy.
+- **AC-16.5 (MUST)** Each tool's JSON schema is generated from one source shared with its runtime validation — no hand-written second copy. **Use Zod 4's native `z.toJSONSchema()`** — this needs no `zod-to-json-schema` dependency, and the same emitted schema is what LRN-09 puts in the prompt and LRN-36 counts tokens against (X-12).
 - **AC-16.6 (MUST)** `plan()` is called and its result journaled **before** `execute()` in all cases, including when policy will allow it. Asserted by ordering in the journal.
 
 **LRN-17 — Read tools**
@@ -324,7 +336,7 @@ tools.** Do not reorder for convenience.
 | **LRN-24** | 12–15 edit fixtures covering the ways this breaks: CRLF, BOM, tabs vs spaces, near-duplicate anchors, an anchor appearing twice, trailing whitespace | Core | S | 23 | LR-FR-021 | **0 wrong-location applications.** That number matters far more than the apply rate | todo | — |
 | **LRN-25** | Checkpoints: copy each file's bytes before writing it, so a bad edit is one command to undo | Core | M | 23 | LR-FR-022 | `om undo` restores the last edit on a real repo | todo | — |
 | **LRN-26** | `edit` and `write` tools with accurate `plan()`, gated by policy | Core | M | 21d, 23, 25 | LR-FR-020 | The model changes a file only after you approved that exact change | todo | — |
-| **LRN-27** | Shell decomposition + the `bash` tool: split on `&&`, `\|\|`, `;`, `\|`, `$()`, backticks and leading assignments into per-subcommand capabilities. **Anything not fully parsed escalates to `ask`** | Core | L | 21d | LR-FR-018, LR-NFR-004 | A property test tries to smuggle an effect past the parser; every miss lands on `ask`, never `allow` | todo | — |
+| **LRN-27** | Shell decomposition + the `bash` tool: **parse with `tree-sitter-bash`** (D-11), then walk the tree into per-subcommand capabilities across `&&`, `\|\|`, `;`, `\|`, `$()`, backticks and leading assignments. **Anything not fully parsed escalates to `ask`** — and with a grammar that is a structural fact, not a heuristic | Core | L | 21d | LR-FR-018, LR-NFR-004 | A property test tries to smuggle an effect past the walker; every miss lands on `ask`, never `allow`. A second test pins walker exhaustiveness over the grammar's node types | todo | — |
 | **LRN-28** | `todo` tool, completing the roster of 7 | Core | S | 16 | LR-FR-020 | The model keeps a visible task list across a long turn | todo | — |
 | **LRN-29** | Resume: `om resume <id>` continues a session, including one that stopped at exit 2 awaiting approval. An operation whose outcome is unknown after a crash is **surfaced, never re-run** | Core | M | 06, 18, 22 | LR-FR-003, D-10 | Kill it mid-tool-call, resume, and it tells you what it doesn't know; a needs-approval session resumes at the pending decision | todo | — |
 
@@ -351,7 +363,8 @@ tools.** Do not reorder for convenience.
 
 **LRN-22 — Approvals**
 - **AC-22.1 (MUST)** The prompt shows the tool, the capability summary (exact paths to be read/written, exact command to be run) and the reason.
-- **AC-22.2 (MUST)** For an edit, a unified diff of the **actual** proposed change is shown before the decision.
+- **AC-22.2 (MUST)** For an edit, a unified diff of the **actual** proposed change is shown before the decision. Generate it with `diff` (jsdiff) `structuredPatch`/`createTwoFilesPatch` and colour it with `picocolors` — do not hand-roll a diff ([ADR-025](adr/ADR-025-buy-solved-subsystems.md)). **This prompt is the primary safety UI of the product**; it is what stands between you and a bad edit, so it should be correct on day one and the effort should go into the capability summary, which no library provides.
+- **AC-22.9 (MUST)** All model-authored text is passed through Node's built-in `util.stripVTControlCharacters` **before** any of it reaches the terminal. Model output is an ANSI-injection surface (architecture §7.6 constraint 1); enforcing it here means the constraint is real now rather than deferred to a TUI that may never ship.
 - **AC-22.3 (MUST)** Scopes `once` and `session` are offered; a `session` grant applies to a subsequent identical capability and a test asserts it does **not** apply to a different one.
 - **AC-22.4 (MUST)** Every decision is journaled with `decided_by`, scope, reason and timestamp.
 - **AC-22.5 (MUST)** With no TTY, the run **never prompts and never hangs**: it exits **2** with a resumable payload naming the session id and the pending capability.
@@ -361,7 +374,7 @@ tools.** Do not reorder for convenience.
 
 **LRN-23 — `str_replace` engine** *(`packages/patch`, TypeScript)*
 - **AC-23.1 (MUST)** An exact single match applies.
-- **AC-23.2 (MUST)** **Zero matches**: the file is unmodified and the result lists the nearest candidates with line numbers.
+- **AC-23.2 (MUST)** **Zero matches**: the file is unmodified and the result lists the nearest candidates with line numbers. Rank candidates with `fastest-levenshtein` rather than a hand-rolled similarity metric; the *refusal* semantics stay ours, only the ranking is bought ([ADR-025](adr/ADR-025-buy-solved-subsystems.md)).
 - **AC-23.3 (MUST)** **Multiple matches**: the file is unmodified and the result reports every match location. It never picks one.
 - **AC-23.4 (MUST)** The whitespace-tolerant fallback runs **only** when it produces exactly one match; two tolerant matches is a failure, not a choice.
 - **AC-23.5 (MUST)** On every failure path the file's bytes are unchanged — asserted by hashing before and after.
@@ -392,10 +405,11 @@ tools.** Do not reorder for convenience.
 - **Rejects:** writing a file the capability did not name; applying an edit after its approval's input changed.
 
 **LRN-27 — Shell decomposition and `bash`**
-- **AC-27.1 (MUST)** A command string decomposes on `&&`, `||`, `;`, `|`, `$()`, backticks and leading `VAR=value` into per-subcommand capabilities.
-- **AC-27.2 (MUST)** **Any construct not fully parsed escalates to `ask`.** A property test generates command strings and asserts the parser **never** returns `allow` for input it did not fully model. A miss must land on `ask`.
-- **AC-27.3 (MUST)** Specific adversarial cases are covered: nested `$( )`, a backtick inside a string, `|` inside a quoted argument, a here-doc, a trailing `&`, and a subshell `( )`.
-- **AC-27.4 (MUST) — validate twice:** the `shell` request carries the host's decomposed capability list; the driver **independently re-decomposes** and refuses if its parse yields an effect not present in that list. Asserted by a test that hand-crafts a mismatched request.
+- **AC-27.1 (MUST)** A command string decomposes on `&&`, `||`, `;`, `|`, `$()`, backticks and leading `VAR=value` into per-subcommand capabilities. **The parse comes from `tree-sitter-bash`, not a hand-written splitter** ([ADR-025](adr/ADR-025-buy-solved-subsystems.md), blueprint D-11): `web-tree-sitter` plus the grammar's `.wasm` on the host, the `tree-sitter`/`tree-sitter-bash` crates in the stub, so AC-27.4's independent re-check uses one source of truth in two languages. Load the wasm lazily so it never enters the LR-NFR-007 startup path. Our code is the *walk* — extracting effects from the tree — and the policy mapping; the grammar is not ours to maintain.
+- **AC-27.2 (MUST)** **Any construct not fully parsed escalates to `ask`, as a structural invariant.** Concretely: a tree containing an `ERROR` or `MISSING` node, or *any* node type the walker has no explicit case for, escalates — asserted directly, not inferred. This is the point of using a grammar: "did not fully understand" stops being a property you hope your regexes have and becomes a fact you read off the parse tree. tree-sitter is error-*tolerant* by design and will happily return a tree for garbage, so treating `ERROR` as `ask` is what makes that tolerance safe, and it must be its own named test.
+- **AC-27.2b (MUST) — walker exhaustiveness.** A test enumerates the grammar's node types and asserts the walker either handles each one or routes it to `ask`; adding a node type it has never seen cannot silently produce `allow`. The property test from the original criterion is retained, but its job changes: it now hunts for gaps in *our walk*, not for holes in a regex. That is a bounded search space rather than an open-ended one.
+- **AC-27.3 (MUST)** Specific adversarial cases are covered: nested `$( )`, a backtick inside a string, `|` inside a quoted argument, a here-doc, a trailing `&`, and a subshell `( )`. The grammar handles the *parsing* of all six; these tests assert the **walk maps each to the right capabilities**, which is the part that is still ours to get wrong. Add one more: `eval "$CMD"` — a CST is not a semantic evaluator, so a variable-expanded command is unknowable statically and **must** escalate, with the sandbox as the backstop.
+- **AC-27.4 (MUST) — validate twice:** the `shell` request carries the host's decomposed capability list; the driver **independently re-decomposes** and refuses if its parse yields an effect not present in that list. Asserted by a test that hand-crafts a mismatched request. Using `tree-sitter-bash` on both sides (AC-27.1) makes this near-free: two independent walks of the same grammar in two languages, rather than a second bespoke parser to keep in sync.
 - **AC-27.5 (MUST)** The `bash` tool declares `process` plus the filesystem effects its decomposition found.
 - **AC-27.6 (MUST)** Output is bounded by LRN-19's module, not by the tool.
 - **AC-27.7 (MUST)** A destructive-class command (`rm -rf`, force push) always asks, regardless of any allow rule.
@@ -428,7 +442,7 @@ place to *be* for a while; it is not an acceptable place to *stay*.
 
 | # | Task | Type | Size | Depends | Req | Done when | Status | Comments |
 |---|---|---|---|---|---|---|---|---|
-| **LRN-30** | Cargo workspace + `native/om-stub`: JSON-RPC over stdio, `health` (version, profile in force, enforcement status), and `read`/`write`/`stat`/`glob`/`grep`/`exec` with the same budgets the TS one enforced. `exec` kills the process tree on budget exhaustion | Harden | L | 13 | LR-FR-007, LR-FR-009 | A SIGTERM-ignoring process is dead within 1 s. `om-stub` passes the **same contract tests** the TS implementation passes | todo | — |
+| **LRN-30** | Cargo workspace + `native/om-stub`: JSON-RPC over stdio, `health` (version, profile in force, enforcement status), and `read`/`write`/`stat`/`glob`/`grep`/`exec` with the same budgets the TS one enforced. `exec` kills the process tree on budget exhaustion. DTO mirroring uses `schemars`-derived JSON Schema checked against the LRN-05 `z.toJSONSchema()` emit; canonicalization uses `serde_jcs` verified against LRN-05's golden vectors (X-15, [ADR-025](adr/ADR-025-buy-solved-subsystems.md)) | Harden | L | 13 | LR-FR-007, LR-FR-009 | A SIGTERM-ignoring process is dead within 1 s. `om-stub` passes the **same contract tests** the TS implementation passes | todo | — |
 | **LRN-31** | **Swap.** `stub-client` drives the Rust stub; the TypeScript implementation stays as the in-process test fake | Harden | M | 30 | LR-FR-007 | Every M2/M3 test still passes with no change to any tool. **If a tool needs changing, the port leaked — fix that first** | todo | — |
 | **LRN-32** | Path containment `proptest` in Rust: symlink escape, case-insensitive collision, unicode normalization, TOCTOU (swap the path between canonicalize and open) | Harden | L | 30 | LR-FR-008, LR-NFR-001 | No generated input reads or writes outside the root. **Write this adversarially — it is the most valuable test in the project** | todo | — |
 | **LRN-33** | `packages/sandbox`: placement port + the Seatbelt driver over `@anthropic-ai/sandbox-runtime`. Workspace read/write, **no network at all** (D-01), fail closed if the profile cannot be enforced | Harden | L | 31 | LR-FR-010 | Startup refuses with remediation text rather than degrading. Profile scope documented in `docs/architecture/sandbox.md` | todo | — |
@@ -441,10 +455,11 @@ place to *be* for a while; it is not an acceptable place to *stay*.
 - **AC-30.1 (MUST)** Cargo workspace builds; `cargo fmt --check` and `cargo clippy -- -D warnings` are clean.
 - **AC-30.2 (MUST)** JSON-RPC 2.0 over stdio; `health` returns version, sandbox profile in force and enforcement status.
 - **AC-30.3 (MUST)** A protocol version mismatch is **refused at handshake**, not warned about.
-- **AC-30.4 (MUST)** Rust DTOs are generated from or schema-checked against `packages/protocol`; a round-trip test fails when a field is renamed on either side.
+- **AC-30.4 (MUST)** Rust DTOs are generated from or schema-checked against `packages/protocol`; a round-trip test fails when a field is renamed on either side. **Mechanism:** hand-write the Rust structs, derive their JSON Schema with `schemars`, and assert equality against the schema `packages/protocol` emits via Zod 4's native `z.toJSONSchema()` (no `zod-to-json-schema` dependency, no bespoke codegen pipeline). If schema-equality checking proves too coarse to catch a real drift, generate the Rust types instead with `typify` ([ADR-025](adr/ADR-025-buy-solved-subsystems.md)).
 - **AC-30.5 (MUST)** **It passes the LRN-13 contract suite verbatim**, with no suite modifications. Any change required to the suite is a defect in the port, not in the suite.
 - **AC-30.6 (MUST)** `exec` kills the whole process tree on budget exhaustion; a process trapping SIGTERM is dead within 1 s, verified by a test that spawns exactly such a process.
 - **AC-30.7 (MUST)** Budgets are enforced **inside the stub**, not only by the caller — a hand-crafted oversized response is still truncated.
+- **AC-30.8 (MUST) — canonical JSON agrees byte-for-byte.** The Rust side canonicalizes with `serde_jcs` (RFC 8785) and its output matches, byte-for-byte, the golden-vector fixture committed at LRN-05 (entries → expected canonical bytes → expected `sha256`). This is what makes AC-6.2's per-record hash portable across languages; without a committed target, a canonicalization mismatch surfaces as a live journal-hash failure instead of a fixture diff.
 
 **LRN-31 — The swap**
 - **AC-31.1 (MUST)** `stub-client` selects the driver by configuration; `stub-rpc` becomes the default.
@@ -477,7 +492,7 @@ place to *be* for a while; it is not an acceptable place to *stay*.
 - **Rejects:** a green suite that would stay green with the sandbox turned off.
 
 **LRN-35 — `om doctor`**
-- **AC-35.1 (MUST)** Checks toolchain versions, stub binary presence and version, sandbox enforceability, config validity and endpoint reachability.
+- **AC-35.1 (MUST)** Checks toolchain versions, stub binary presence and version, sandbox enforceability, config validity and endpoint reachability. **Toolchain versions includes `rg` (ripgrep) on PATH** — LRN-13/LRN-30 depend on it (AC-13.5, [ADR-025](adr/ADR-025-buy-solved-subsystems.md)) and its absence should fail here with a remediation, not surface later as a driver error mid-turn.
 - **AC-35.2 (MUST)** Every failure prints a specific remediation, not just a status.
 - **AC-35.3 (MUST)** Each check has a test that forces its failure and asserts the message.
 - **AC-35.4 (MUST)** The same probes run at startup; an unenforceable sandbox refuses to start.
@@ -505,8 +520,8 @@ place to *be* for a while; it is not an acceptable place to *stay*.
 
 **LRN-36 — Context accounting**
 - **AC-36.1 (MUST)** Tokens are attributed per component: system prompt, instructions, tool schemas, conversation, tool results by age, reserved output.
-- **AC-36.2 (MUST)** The total is within 2% of the endpoint's reported prompt tokens on fixtures where usage is reported.
-- **AC-36.3 (MUST)** Where usage is not reported, the display says **estimated** and names the tokenizer assumption.
+- **AC-36.2 (MUST)** The total is within 2% of the endpoint's reported prompt tokens on fixtures where usage is reported. **Where it is not reported, this 2% target does not apply** ([ADR-025](adr/ADR-025-buy-solved-subsystems.md), LR-FR-025): the configured model is not an OpenAI one, so an OpenAI-vocabulary tokenizer is a genuine approximation, not a precise count, and pretending otherwise would violate blueprint §0 rule 3 ("claims are scoped to what you ran").
+- **AC-36.3 (MUST)** Where usage is not reported, the display says **estimated**, names the tokenizer assumption (`gpt-tokenizer`, a named vocabulary such as `o200k_base` — not the active model's real tokenizer), and the approximation's measured error against fixtures where usage *is* reported is recorded rather than assumed to be small. Do not implement a BPE tokenizer by hand; `gpt-tokenizer` (pure TypeScript, no WASM) is the library, used only for this approximate path.
 - **AC-36.4 (MUST)** `om context` shows the breakdown and the percentage of the window in use.
 
 **LRN-37 — Compaction**
@@ -527,8 +542,8 @@ place to *be* for a while; it is not an acceptable place to *stay*.
 
 **LRN-39 — Argument repair**
 - **AC-39.1 (MUST)** Repairs are driven by **failures you actually collected** from your endpoint, each captured as a fixture — not invented cases.
-- **AC-39.2 (MUST)** Trailing commas, unquoted keys, single quotes and truncated JSON are repaired when unambiguous.
-- **AC-39.3 (MUST)** Genuinely ambiguous input becomes a **structured retryable error** fed back to the model, never a guess.
+- **AC-39.2 (MUST)** Trailing commas, unquoted keys, single quotes and truncated JSON are repaired when unambiguous. **Use `jsonrepair`** rather than a hand-written JSON grammar-recovery parser ([ADR-025](adr/ADR-025-buy-solved-subsystems.md)) — this is a solved problem with many known edge cases and no learning value in reimplementing it.
+- **AC-39.3 (MUST)** Genuinely ambiguous input becomes a **structured retryable error** fed back to the model, never a guess. **`jsonrepair`'s output is a candidate, never used directly:** it must re-validate against the tool's Zod schema before use, and validation failure — or a repair that changed something semantically load-bearing — is what produces this AC's structured retryable error. The library is charitable by design; this wrapper is where "never guess" stays a property of *our* contract rather than the library's, and it is ours to test, not the library's.
 - **AC-39.4 (MUST)** Repetition-loop detection halts a model repeating an identical failing call after N attempts.
 - **AC-39.5 (MUST)** Every repair is journaled so you can see what was changed and why.
 - **Rejects:** silently guessing an argument value.
@@ -542,7 +557,7 @@ place to *be* for a while; it is not an acceptable place to *stay*.
 **LRN-41 — Secret hygiene and logs**
 - **AC-41.1 (MUST)** The stub's environment is an **explicit allowlist**; a test asserts the credential variable is absent from the child process environment.
 - **AC-41.2 (MUST)** Redaction runs before anything enters the journal, a log or a tool result.
-- **AC-41.3 (MUST)** A scanner over all test artifacts fails if key material appears; it is proved effective by a fixture containing a planted fake key.
+- **AC-41.3 (MUST)** A scanner over all test artifacts fails if key material appears; it is proved effective by a fixture containing a planted fake key. **Use `gitleaks`** (maintained rule set covering Groq/OpenAI/AWS/JWT/PEM and more) rather than a hand-written regex set, which would reliably catch the planted key and miss the shapes that actually leak ([ADR-025](adr/ADR-025-buy-solved-subsystems.md)); the planted-key fixture then proves the scanner is wired up correctly, which is its real job.
 - **AC-41.4 (MUST)** One structured log line per turn and per tool call, with prompt/response content **off by default**.
 - **AC-41.5 (MUST)** Enabling content logging requires an explicit flag and prints a warning.
 
@@ -622,6 +637,8 @@ creates rework.
 | **X-11** | **LRN-14 → everything after** | The boundary lint must land while three files violate it, not thirty. It is cheap in M2 and expensive in M4 | AC-14.2 |
 | **X-12** | **LRN-09 → LRN-16 → LRN-36** | Tool schemas are assembled into the prompt and counted in context accounting. One source for the schema, used by all three | AC-9.2, AC-16.5, AC-36.1 |
 | **X-13** | **LRN-33 → LRN-34** | An escape test that passes without naming the profile it ran under proves nothing; the negative control is what makes the suite meaningful | AC-34.4, AC-34.6 |
+| **X-14** | **LRN-12 → LRN-13/LRN-30** | The port's regex dialect and path-canonicalization semantics must be pinned *before* the contract suite is written, or a suite that passes against JS `RegExp`/Node `realpath` in M2 can fail against Rust `regex`/`canonicalize` in M4 — and AC-30.5 would misdiagnose that as a port leak rather than an unspecified contract | AC-12.6, AC-13.8, AC-30.5 |
+| **X-15** | **LRN-05 → LRN-16/LRN-30** | The protocol's `z.toJSONSchema()` emit and its canonical-JSON golden vectors must exist before LRN-16 needs a schema source and LRN-30 needs a cross-language hash target, or both get solved twice — once provisionally in TS, once for real when Rust arrives | AC-5.8, AC-16.5, AC-30.4, AC-30.8 |
 
 ---
 

@@ -781,7 +781,9 @@ This blends Claude Code's mode semantics ([how it works](https://code.claude.com
 
 Every tool implements `plan(input, ctx) → CapabilityRequest` before `execute`. The policy engine evaluates capabilities, never tool names. User-facing rules keep the familiar `Tool(pattern)` syntax so Claude Code and Copilot rule files import cleanly; they compile to capability predicates. Precedence: `deny` > `ask` > `allow`, and managed > user > project > local > session, with the managed tier un-overridable (Copilot's policy hooks and Claude Code's `allowManagedHooksOnly` are the precedents) **[F]**.
 
-Shell commands are decomposed per subcommand (`&&`, `|`, `;`, `$()`, backticks; leading `VAR=value` stripped) into separate effects. Claude Code documents that this extraction is best-effort and tells users to enforce hard rules through permissions rather than hook matching ([hooks reference](https://code.claude.com/docs/en/hooks)) **[F]** — so in this design uncertainty escalates to `ask` and destructive denies are enforced by the sandbox, not by regex. The in-process bash interpreter (§11.7) is the path to removing this weakness entirely.
+Shell commands are decomposed per subcommand (`&&`, `|`, `;`, `$()`, backticks; leading `VAR=value` stripped) into separate effects. Claude Code documents that this extraction is best-effort and tells users to enforce hard rules through permissions rather than hook matching ([hooks reference](https://code.claude.com/docs/en/hooks)) **[F]** — so in this design uncertainty escalates to `ask` and destructive denies are enforced by the sandbox, not by regex.
+
+**Superseded for the learning release by [ADR-025](docs/adr/ADR-025-buy-solved-subsystems.md) (blueprint D-11):** decomposition parses with `tree-sitter-bash` rather than a regex/string splitter, on both the host and (in M4) the stub. That converts "best-effort extraction" from a property you hope holds into a structural fact readable off the parse tree — an `ERROR`/`MISSING` node, or a node type the walker has no case for, escalates to `ask` by construction, closing part of the gap §11.7 otherwise assigns to a full interpreter. It does not replace §11.7's motivations for native shell muscle memory or Windows portability, which stay out of scope here (macOS-only); it replaces only the *parsing* half of the best-effort weakness this section names.
 
 ### 10.5 Sandbox implementation and placement
 
@@ -867,6 +869,8 @@ Design: `str_replace` default with uniqueness check and whitespace-tolerant fall
 omp ships a complete bash parser, interpreter and coreutils in-process, which buys three things: the model keeps its shell muscle memory while `grep` is routed to the built-in engine; Windows works natively without WSL or Git Bash; and approval happens at the capability boundary that matters — the interpreter can ask at the moment execution reaches `ln`, when everything before it was read-only ([article](https://stencil.so/blog/harness-playbook#the-tool-surface)) **[F]**.
 
 Note that macOS-only scope removes one of those three motivations entirely: we have a real POSIX shell, so the Windows argument does not apply to us. What remains is the one that matters most — it fixes §10.4's best-effort command-parsing weakness, which is a security property, not a portability convenience.
+
+**Partially pre-empted for the learning release:** §10.4's decomposition now parses with `tree-sitter-bash` rather than regex ([ADR-025](docs/adr/ADR-025-buy-solved-subsystems.md)), which delivers this section's third motivation — capability-level approval at a real syntactic boundary — without a full in-process interpreter. What a `brush-core` embedding would still add on top: routing `grep`/coreutils through a built-in engine and true semantic evaluation (e.g. resolving `$VAR` in `eval "$CMD"`, which a CST cannot do). The spike below remains the path to that; it is no longer the only path to safer parsing.
 
 **Decision [R]:** deferred, not rejected. In scope, the stub runs the real macOS shell (`bash`/`zsh`) inside Seatbelt with per-subcommand effect extraction. The hardening roadmap keeps a spike to embed a bash interpreter in the Rust stub (`brush-core` 0.5.0 is a reusable POSIX/bash core; it is also what omp vendors) and measure compatibility against the golden-task corpus. If it clears ≥ 95%, capability-level approvals replace string-pattern approvals for common commands.
 
@@ -970,6 +974,14 @@ om-code/
 
 ## 15. L — Build versus buy
 
+**This table describes the full production architecture, not the learning release.** Per §12's
+caveat, the learning release (blueprint M1–M5) does not build `dyn`, `mcp`, `acp`, `app-server`,
+`hooks`, `plugins`, `telemetry`, `tui` or `sdk`, so rows about them are prior-art reference, not
+active decisions. [ADR-024](docs/adr/ADR-024-no-langchain.md) supersedes the "Provider transport"
+row below — the learning release's wire layer is a hand-rolled `fetch` + SSE adapter, not the AI
+SDK. [ADR-025](docs/adr/ADR-025-buy-solved-subsystems.md) is the current build-vs-buy record for
+the subsystems M2–M5 actually build; consult it, not this table, for those.
+
 | Capability | Decision | Rationale | Revisit when |
 |---|---|---|---|
 | Agent loop and kernel | **Build** | Multi-provider control, journaling at every step, policy interposition; vendor SDKs own loop semantics and (Claude's) run the vendor CLI with its own on-disk state **[F]** | Product becomes single-vendor |
@@ -1019,6 +1031,17 @@ om-code/
 ---
 
 ## 17. N — Final opinionated stack
+
+**This is the full production stack, not the learning release's dependency list** (§12's caveat
+applies here too). Several rows below are overridden for the learning release:
+[ADR-024](docs/adr/ADR-024-no-langchain.md) drops `ai`/`@ai-sdk/*` (no AI SDK; hand-rolled
+transport) and the agent-framework rows generally; [ADR-023](docs/adr/ADR-023-macos-openai-compatible-learning-scope.md)
+and the blueprint's D-06/GAP-05/D-02 drop `better-sqlite3`, `kysely`, the OpenTelemetry rows, and
+`ink`/`react` until their features re-enter scope; `AGENTS.md` defers `turbo` until the build
+actually needs a task graph; `commander` and `pino` are superseded by the shipped hand-written CLI
+parser and structured NDJSON logging respectively (see "keep custom" in
+[ADR-025](docs/adr/ADR-025-buy-solved-subsystems.md)). The rows for the executor stub, ripgrep
+crates, `@anthropic-ai/sandbox-runtime` and `proptest` remain accurate for M2–M4.
 
 All versions verified from the npm registry, crates.io, PyPI or the official release schedule on 2026-09-04/05 **[F]**. For each item: purpose · why · limitation · alternative · what would change it.
 

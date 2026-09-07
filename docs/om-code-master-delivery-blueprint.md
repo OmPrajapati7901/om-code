@@ -117,6 +117,8 @@ and carries a reversal trigger.
 | D-08 | **Milestones, not weeks.** No dates, no velocity, no burndown | Solo learning pace is not schedulable, and a missed date is noise, not signal | Never |
 | D-09 | **Model tools are read-only until the policy engine exists.** The model gets `read`/`grep`/`glob` (M2) before it gets `edit`/`write`/`bash` (M3, after policy) | ADR-023: policy precedes executable model tools. It is also the only ordering where an early bug is harmless | Never — this is a safety ordering |
 | D-10 | **Crash reconciliation never re-runs a command.** On resume, an operation whose outcome is unknown is reported as unknown and left to you | ADR-023, and repeating an arbitrary command is how a crash becomes two deployments | Never |
+| D-11 | **Shell commands are decomposed with a real bash grammar (`tree-sitter-bash`), not a hand-written splitter** ([ADR-025](docs/adr/ADR-025-buy-solved-subsystems.md)) | This is a safety decision, not a convenience one. With a splitter, "the parser did not fully understand this" is a heuristic you can only gain confidence in; with a grammar it is a *structural fact* — an `ERROR`/`MISSING` node or an unhandled node type escalates to `ask` by construction. The same grammar exists in TypeScript and Rust, so LR-FR-018's host decomposition and the stub's independent re-check use one source of truth | The grammar cannot represent a construct policy must reason about — record the case |
+| D-12 | **Buy the solved subsystems; build the boundary.** Search, tokenization, JSON repair, diff rendering, secret scanning and schema mirroring are bought; the journal, the FSM, the policy core, the patch engine, checkpoints and the stub are built ([ADR-025](docs/adr/ADR-025-buy-solved-subsystems.md)) | The parts worth writing are the ones that encode *our* invariants — refusal semantics, append-before-effect, fail-closed. The parts not worth writing are the ones whose failure modes are already documented in someone else's issue tracker. Every purchase sits inside a module the architecture already isolates, so reversal is contained | Per-row triggers in ADR-025 |
 
 ---
 
@@ -176,7 +178,7 @@ observable that proves it.
 | **LR-FR-015** | **Capability model.** Every tool implements `plan(input) → CapabilityRequest` before `execute`. Policy evaluates capabilities, never tool names | C | A tool without a `plan()` cannot be registered — enforced by the type system |
 | **LR-FR-016** | **Policy engine.** Modes `read_only` and `manual`. Precedence `deny > ask > allow`; tiers user > project > session. Evaluation errors fail closed. Unknown or unparsed input escalates to `ask` | C | Exhaustive unit matrix over mode × capability class × tier |
 | **LR-FR-017** | **Approvals.** The prompt shows the tool, the capability summary (read / write / execute / paths), a diff for edits, and the reason. Decisions are `once` or `session`, and every decision is journaled with who decided and why | C | Non-interactive runs never prompt: they exit 2 with a resumable needs-approval payload |
-| **LR-FR-018** | **Shell decomposition.** A shell string is split per subcommand (`&&`, `\|\|`, `;`, `\|`, `$()`, backticks, leading assignments) into separate capabilities. **Any construct the parser does not fully understand escalates to `ask`** — the sandbox is the backstop, not the parser | C | Property test attempts to smuggle an effect past the decomposer; every miss must land on `ask`, never `allow` |
+| **LR-FR-018** | **Shell decomposition.** A shell string is parsed with a real bash grammar (D-11) and split per subcommand (`&&`, `\|\|`, `;`, `\|`, `$()`, backticks, leading assignments) into separate capabilities. **Any construct the parser does not fully understand escalates to `ask`** — an `ERROR`/`MISSING` node or a node type the walker has no case for, so the rule is structural rather than a heuristic. The sandbox is the backstop, not the parser | C | Property test attempts to smuggle an effect past the decomposer; every miss must land on `ask`, never `allow`. A second test asserts walker exhaustiveness over the grammar's node types |
 | **LR-FR-019** | **Kernel loop.** An explicit turn state machine — build context → infer → stream → tool requested → policy → (approval) → execute → process result → yield — with every transition journaled and illegal transitions unrepresentable | C | State-machine tests; a transcript replays the same tool sequence |
 | **LR-FR-020** | **Tool roster (exactly 7).** `read`, `grep`, `glob`, `edit`, `write`, `bash`, `todo`. Read-class tools are wired first; `edit`/`write`/`bash` only after LR-FR-016 exists (D-09) | C | Roster size is asserted by a test, so adding an eighth is a deliberate act |
 | **LR-FR-021** | **Exact editing.** `str_replace` with a uniqueness check and a whitespace-tolerant fallback used only when the match is unique. On failure, return nearest candidates with line numbers and change nothing | C | A 40-case fixture set including CRLF, BOM, deep indentation and near-duplicate anchors; ≥ 95% apply rate, 0 wrong-location applications |
@@ -188,7 +190,7 @@ observable that proves it.
 
 | ID | Requirement | Pri | Done when |
 |---|---|---|---|
-| **LR-FR-025** | **Context accounting.** Tokens per component — system prompt, instructions, tool schemas, conversation, tool results by age, reserved output — visible via `om context` | H | Within 2% of the endpoint's reported prompt tokens on fixtures |
+| **LR-FR-025** | **Context accounting.** Tokens per component — system prompt, instructions, tool schemas, conversation, tool results by age, reserved output — visible via `om context` | H | Within 2% of the endpoint's reported prompt tokens on fixtures **where usage is reported**. Where it is not, the count is a named approximation (D-12: `gpt-tokenizer`) whose error against a reporting endpoint is measured and recorded — the active model is not an OpenAI one, so its true tokenizer differs and pretending otherwise would be the kind of unmeasured claim §0 rule 3 forbids |
 | **LR-FR-026** | **Compaction.** Client-side: evict oldest tool results to placeholders first, then summarize into a structured record appended to the journal. **The journal is never rewritten.** A thrash guard stops after K attempts and tells you | H | A long scripted session crosses the threshold and keeps working; the summary record is a provable fold of what it covers |
 | **LR-FR-027** | **Argument repair.** Malformed tool arguments get JSON repair and dialect tolerance; genuinely ambiguous input becomes a structured retryable error, not a guess | H | Fixture set of malformed calls from real endpoint behaviour |
 | **LR-FR-028** | **Cancellation.** Ctrl-C kills in-flight stub work and leaves the session resumable | H | Kill lands within 1 s; the journal shows a cancelled tool call, not a dangling one |
@@ -638,13 +640,19 @@ Not "never" — "not now, and here is exactly what would change my mind".
 | [ADR-021](docs/adr/ADR-021-product-licence.md) | Apache-2.0 | Stands |
 | [ADR-022](docs/adr/ADR-022-journal-encryption-at-rest.md) | Encryption off by default | Stands; opt-in mode is not built |
 | [ADR-023](docs/adr/ADR-023-macos-openai-compatible-learning-scope.md) | macOS + OpenAI-compatible first | **The scope authority for this document** |
+| [ADR-024](docs/adr/ADR-024-no-langchain.md) | No LangChain or LangGraph, at any layer, for now | Stands; reasoning amended 2026-09-06 after re-derivation — the decision did not move, two of its arguments did |
+| [ADR-025](docs/adr/ADR-025-buy-solved-subsystems.md) | Buy the solved subsystems, build the boundary | Source of D-11 and D-12 |
 
 Architecture decisions ADR-001…ADR-020 from the archived blueprint are *not* re-ratified here. The ones
 still load-bearing are stated as decisions in the [architecture document](docs/coding-agent-harness-final-architecture.md):
 host decides / stub executes, journal as single authority, capability-based policy, buy the sandbox
 runtime, small tool roster, AI SDK for wire format. The rest — Directors, plugins, `dyn`, app-server,
 speculative compaction, Ink — described things this release does not build; they return with their
-feature, not before. **Write a new ADR when you make a real decision.** Next free number: **ADR-024**.
+feature, not before. **Write a new ADR when you make a real decision.** Next free number: **ADR-026**.
+
+Note that "AI SDK for wire format" in the list above is **superseded by ADR-024**: the wire layer is
+a hand-rolled `fetch` + SSE adapter behind `ModelProvider`. The architecture document's §15 and §17.2
+still describe the full production stack and are annotated accordingly.
 
 ---
 
@@ -657,12 +665,19 @@ Not ten. Five, in order, each finishable in a sitting.
 | 1 | `git init`; add `.gitignore` (`node_modules`, `target`, `runs/`, `.om-code/`); commit the four planning documents as they stand | A repository with history, so the next rewrite is recoverable |
 | 2 | Scaffold the workspace: pnpm workspace, `tsconfig.base.json` (strict, ESM, NodeNext), `biome.json`, `.tool-versions`, and the `om` bin entry | `pnpm install && om --version` green on macOS arm64 |
 | 3 | Add the boundary lint (`dependency-cruiser` + the spawn/fs rule) **with a planted-violation test that fails** | The rule is real before there is anything to violate it |
-| 4 | Write `packages/protocol`: journal envelope, entries, `CapabilityRequest`, stub RPC — plus Rust codegen and the round-trip test | The one contract everything else depends on |
+| 4 | Write `packages/protocol`: journal envelope, entries, `CapabilityRequest`, stub RPC — plus the `z.toJSONSchema()` emit and a canonical-JSON golden-vector fixture | The one contract everything else depends on |
 | 5 | Implement the journal in `packages/storage` with `fsync` commit points and corrupt-tail repair | The append/read/materialize property test passes |
 
 **Cargo moved out of action 2 (LRN-03, 2026-09-05).** ADR-023 defers the Rust stub to M4, so a Cargo
 workspace at scaffold time would be an empty build with nothing to compile. It arrives with
 `native/om-stub` in LRN-30, and backlog AC-3.5 asserts it is absent before then.
+
+**Rust codegen moved out of action 4 (2026-09-06).** Same reason: there is no Rust to generate into
+until LRN-30. What *is* worth doing at protocol time is the half that has no Rust dependency — emit
+JSON Schema from the Zod definitions (`z.toJSONSchema()`, native in Zod 4) and commit a
+canonical-JSON golden-vector fixture of entries with their expected bytes and `sha256`. Then M4's
+cross-language agreement (AC-30.4, and the journal hash) is a comparison against a committed target
+rather than a discovery. See [ADR-025](docs/adr/ADR-025-buy-solved-subsystems.md).
 
 **First commit:** `chore(repo): initialize the pnpm workspace with pinned toolchains`
 **First real decision to make yourself:** where the journal's commit points sit. That choice is what
