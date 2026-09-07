@@ -17,7 +17,7 @@ After every change, assess whether it introduces durable context that other agen
 
 ## Build, Test, and Development Commands
 
-The pnpm workspace holds `cli`, `storage`, `protocol`, `session` (pure materialization), `providers` (Chat Completions), `kernel` (system prompt assembly and the turn loop), `stub-client` (the stub port: interface, typed errors, dialect contract), and a private root `tests/` workspace for shared contracts and integration. Do not claim a gate passed without running it.
+The pnpm workspace holds `cli`, `storage`, `protocol`, `session` (pure materialization), `providers` (Chat Completions), `kernel` (system prompt assembly and the turn loop), `stub-client` (the stub port plus the local-ts driver behind it), and a private root `tests/` workspace for shared contracts and integration. Do not claim a gate passed without running it.
 
 - `pnpm install --frozen-lockfile` — reproduce pinned TypeScript dependencies.
 - `pnpm run check` — the full local gate: lint, typecheck, build, test, in that order.
@@ -33,6 +33,8 @@ The pnpm workspace holds `cli`, `storage`, `protocol`, `session` (pure materiali
 - `pnpm add --global ./packages/cli` — put `om` on your PATH. `pnpm link --global` was removed in pnpm 11, and `~/Library/pnpm/bin` must be on PATH first (`pnpm setup`).
 
 There is no `pnpm dev`: `om run` is the product REPL, not a development server.
+
+`rg` (ripgrep 15.2.0 here) must be on PATH: the local-ts driver's `glob`/`grep` delegate to `rg --files` / `rg --json` rather than reimplementing search (ADR-025). A missing binary is a named `brew install ripgrep` failure, and `om doctor` will check for it (AC-35.1).
 
 `fs-native-extensions@1.5.0` is the sole early native runtime dependency, confined to storage for nonblocking macOS BSD advisory locks. Its packaged native addon loads without adding a Cargo workspace. Keep its lock inode permanent; never unlink it or replace it during journal repair.
 

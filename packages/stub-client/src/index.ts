@@ -1,9 +1,10 @@
 /**
- * Public surface of @om-code/stub-client (LRN-12).
+ * Public surface of @om-code/stub-client (LRN-12, LRN-13).
  *
- * The port (contract only): the nine-method interface, the typed errors and
- * the regex/glob/path dialect contract. No driver code — nothing here opens
- * a file or spawns a process (AC-12.5).
+ * The port: the nine-method interface, the typed errors and the regex/glob/
+ * path dialect contract — plus the local-ts driver behind it. The port
+ * modules themselves still open no file and spawn no process (AC-12.5); all
+ * host I/O lives in `drivers/local-ts`, the one module DoD-5 permits it.
  */
 
 export {
@@ -11,6 +12,10 @@ export {
   assertSupportedRegex,
   isInsideRoot,
 } from "./dialect.js";
+export {
+  createLocalDriver,
+  type LocalDriverOptions,
+} from "./drivers/local-ts/driver.js";
 export {
   isStubError,
   type NotImplementedMethod,

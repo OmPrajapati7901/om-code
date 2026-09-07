@@ -14,6 +14,7 @@
     "@om-code/session": "workspace:*",
     "@om-code/providers": "workspace:*",
     "@om-code/kernel": "workspace:*",
+    "@om-code/stub-client": "workspace:*",
     "@types/node": "24.13.3",
     "fast-check": "4.9.0",
     "typescript": "5.9.3",
