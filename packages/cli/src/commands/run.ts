@@ -10,7 +10,6 @@ import { materialize, type SessionView } from "@om-code/session";
 import {
   type ConfigFlags,
   createBlobStore,
-  findProjectRoot,
   JournalReader,
   requireComplete,
   resolveOmHome,
@@ -18,6 +17,7 @@ import {
 import { createLocalDriver } from "@om-code/stub-client";
 import { createRegistry, readOnlyTools, toModelTool } from "@om-code/tools";
 import { booleanFlag, type FlagDefinition, parseArgs, stringFlag } from "../args.js";
+import { discoverRepository, loadInstructionFiles } from "../discovery.js";
 import { buildEnvironment } from "../environment.js";
 import { runRepl } from "../repl.js";
 import { bootstrapSession } from "../session-bootstrap.js";
@@ -98,9 +98,10 @@ export async function runCommand(argv: readonly string[], deps: CliDeps): Promis
   const startedAt = deps.now();
   const environment = buildEnvironment(deps.cwd, deps.osLabel, startedAt);
   const sessionId = deps.newId();
+  const discovered = discoverRepository(deps.cwd);
   const location = {
     omHome: resolveOmHome(deps.env),
-    projectRoot: findProjectRoot(deps.cwd),
+    projectRoot: discovered.root,
   };
   const emitRecord = (record: unknown) => {
     if (json) deps.io.write(`${JSON.stringify(record)}\n`);
@@ -144,6 +145,14 @@ export async function runCommand(argv: readonly string[], deps: CliDeps): Promis
       pricing: settings.pricing,
       now: () => Date.now(),
     });
+    // Instruction files are re-read per request so mid-session edits apply;
+    // only their hashes reach the journal (kernel `prompt` entry).
+    const instructions = await loadInstructionFiles({
+      stub,
+      root: location.projectRoot,
+      signal,
+      warn: (message) => deps.io.writeErr(message),
+    });
     const result = await driveTurn({
       session: view,
       text,
@@ -158,6 +167,7 @@ export async function runCommand(argv: readonly string[], deps: CliDeps): Promis
       modelTools,
       toolRunner,
       budget,
+      instructions,
     });
     view = materialize((await new JournalReader(location).readAll(sessionId)).records);
     return result;

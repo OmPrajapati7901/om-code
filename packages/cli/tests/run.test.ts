@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
@@ -360,6 +360,50 @@ describe("om run", () => {
     const cli = harness(location.root, location.omHome, new FakeProvider(textTurns("ok")));
     expect((await runCli(["run", "-p", "q", "--mode", "read_only"], cli.deps)).exitCode).toBe(0);
     expect((await onlySession(location.root, location.omHome)).view.meta?.mode).toBe("plan");
+  });
+
+  it("AC-20.2 journals instruction hashes and assembles their content, freshly per run", async () => {
+    const { createHash } = await import("node:crypto");
+    const location = await project();
+    await writeFile(join(location.root, "AGENTS.md"), "# Repo rules\n");
+    const first = harness(location.root, location.omHome, new FakeProvider(textTurns("ok")));
+    expect((await runCli(["run", "-p", "q"], first.deps)).exitCode).toBe(0);
+    const view = (await onlySession(location.root, location.omHome)).view;
+    expect(view.prompts.at(-1)?.instructions).toEqual([
+      { path: "AGENTS.md", sha256: createHash("sha256").update("# Repo rules\n").digest("hex") },
+    ]);
+
+    // Edited files are picked up because instructions load per request, never
+    // from a module-level cache (DoD-6).
+    await writeFile(join(location.root, "AGENTS.md"), "# New rules\n");
+    await writeFile(join(location.root, "CLAUDE.md"), "# Claude rules\n");
+    const provider = new FakeProvider(textTurns("ok"));
+    const second = harness(location.root, location.omHome, provider);
+    expect((await runCli(["run", "-p", "q"], second.deps)).exitCode).toBe(0);
+    expect(provider.requests.at(-1)?.messages[0]).toMatchObject({
+      role: "system",
+      content: expect.stringContaining("# New rules"),
+    });
+    expect(provider.requests.at(-1)?.messages[0]).toMatchObject({
+      role: "system",
+      content: expect.stringContaining("# Claude rules"),
+    });
+    const sessions = await listSessions({ projectRoot: location.root, omHome: location.omHome });
+    expect(sessions).toHaveLength(2);
+    const latestId = sessions[0]?.sessionId;
+    if (latestId === undefined) throw new Error("missing session");
+    const latest = materialize(
+      (
+        await new JournalReader({ projectRoot: location.root, omHome: location.omHome }).readAll(
+          latestId,
+        )
+      ).records,
+    );
+    const hashOf = (text: string) => createHash("sha256").update(text).digest("hex");
+    expect(latest.prompts.at(-1)?.instructions).toEqual([
+      { path: "AGENTS.md", sha256: hashOf("# New rules\n") },
+      { path: "CLAUDE.md", sha256: hashOf("# Claude rules\n") },
+    ]);
   });
 });
 

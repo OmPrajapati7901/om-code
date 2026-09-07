@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { findProjectRoot } from "../src/config/paths.js";
+import { findGitRoot, findProjectRoot } from "../src/config/paths.js";
 
 describe("findProjectRoot", () => {
   it("returns cwd itself when it contains .git", () => {
@@ -26,5 +26,15 @@ describe("findProjectRoot", () => {
 
   it("falls back to cwd outside any repo", () => {
     expect(findProjectRoot("/tmp/no-repo-here", () => false)).toBe("/tmp/no-repo-here");
+  });
+});
+
+describe("findGitRoot (LRN-20)", () => {
+  it("returns the root from a subdirectory", () => {
+    expect(findGitRoot("/repo/packages/cli", (path) => path === "/repo/.git")).toBe("/repo");
+  });
+
+  it("returns null outside any repo", () => {
+    expect(findGitRoot("/tmp/no-repo-here", () => false)).toBeNull();
   });
 });

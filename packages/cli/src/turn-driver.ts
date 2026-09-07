@@ -1,5 +1,6 @@
 import {
   type Environment,
+  type InstructionFile,
   type JournalSink,
   runTurn,
   type ToolRunner,
@@ -30,6 +31,7 @@ export type DriveTurnInput = {
   readonly modelTools?: readonly ModelTool[];
   readonly toolRunner?: ToolRunner | undefined;
   readonly budget?: TurnBudget | undefined;
+  readonly instructions?: readonly InstructionFile[];
 };
 
 export async function driveTurn(input: DriveTurnInput): Promise<DrivenTurn> {
@@ -44,7 +46,7 @@ export async function driveTurn(input: DriveTurnInput): Promise<DrivenTurn> {
     signal: input.signal,
     model: input.model,
     environment: input.environment,
-    instructions: [],
+    instructions: input.instructions ?? [],
     tools: input.modelTools ?? [],
     toolRunner: input.toolRunner,
     budget: input.budget,

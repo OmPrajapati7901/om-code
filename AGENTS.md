@@ -30,6 +30,7 @@ The pnpm workspace holds `cli`, `storage`, `protocol`, `session` (pure materiali
 - `node --env-file=.env tests/manual/provider-smoke.mjs` — explicit paid text/tool smoke, capped at 512 completion tokens per request; never part of `pnpm test`.
 - `node --env-file=.env tests/manual/record-fixture.mjs <name>` — explicit paid capture that writes credential-stripped fixtures via `recordingFetch`; never part of `pnpm test`.
 - `om run` — interactive multi-turn REPL; `om run -p "<prompt>"` is one-shot, `--json` emits schema-valid journal records as NDJSON, and `--max-turns` counts agent iterations (model inferences within one user request, LRN-19), not REPL lines.
+- `om run` resolves the git root from any subdirectory (outside a repo it runs in explicit single-directory mode, `project_root == cwd`) and loads `AGENTS.md` then `CLAUDE.md` from the root into every turn, journaled by content hash (LRN-20).
 - `om sessions` and `om show <id>` — list project-scoped journal sessions and render one without inference.
 - `pretypecheck` builds the workspace first, so a package typechecks against the built declarations of the workspace packages it imports (rather than their sources).
 - `pnpm add --global ./packages/cli` — put `om` on your PATH. `pnpm link --global` was removed in pnpm 11, and `~/Library/pnpm/bin` must be on PATH first (`pnpm setup`).

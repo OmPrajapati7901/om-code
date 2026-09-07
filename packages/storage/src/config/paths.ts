@@ -38,6 +38,20 @@ export function findProjectRoot(
   cwd: string,
   exists: (path: string) => boolean = existsSync,
 ): string {
+  return findGitRoot(cwd, exists) ?? (isAbsolute(cwd) ? cwd : resolve(cwd));
+}
+
+/**
+ * Nearest ancestor of cwd (inclusive) containing `.git`, or `null` outside
+ * any repo. LRN-20 discovery builds on this: `null` means explicit
+ * single-directory mode (`project_root == cwd`), never a crash — and never
+ * a silent fallback elsewhere. (AC-20.4: telling worktrees apart from main
+ * checkouts is deferred; finding the root is not.)
+ */
+export function findGitRoot(
+  cwd: string,
+  exists: (path: string) => boolean = existsSync,
+): string | null {
   let current = isAbsolute(cwd) ? cwd : resolve(cwd);
   for (;;) {
     if (exists(join(current, ".git"))) {
@@ -45,7 +59,7 @@ export function findProjectRoot(
     }
     const parent = dirname(current);
     if (parent === current) {
-      return isAbsolute(cwd) ? cwd : resolve(cwd);
+      return null;
     }
     current = parent;
   }

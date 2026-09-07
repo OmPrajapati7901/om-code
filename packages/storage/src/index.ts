@@ -23,6 +23,7 @@ export {
 } from "./config/loader.js";
 export {
   type ConfigPaths,
+  findGitRoot,
   findProjectRoot,
   resolveConfigPaths,
   resolveOmHome,
