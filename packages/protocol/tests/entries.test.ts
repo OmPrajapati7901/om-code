@@ -138,6 +138,19 @@ const FIXTURES: readonly EntryFixture[] = [
     expectedPath: "instructions.0.sha256",
     expectedCode: "invalid_format",
   },
+  {
+    kind: "error",
+    invalid: {
+      kind: "error",
+      schemaVersion: 1,
+      source: "provider",
+      reason: "",
+      message: "failed",
+      retryable: false,
+    },
+    expectedPath: "reason",
+    expectedCode: "too_small",
+  },
 ];
 
 function v1Schema(kind: EntryKind) {
@@ -151,7 +164,7 @@ function v1Schema(kind: EntryKind) {
 describe("entry schemas", () => {
   it("covers every registered kind exactly once (AC-5.1 completeness)", () => {
     expect([...FIXTURES.map((fixture) => fixture.kind)].sort()).toEqual([...ENTRY_KINDS].sort());
-    expect(FIXTURES).toHaveLength(11);
+    expect(FIXTURES).toHaveLength(12);
   });
 
   for (const fixture of FIXTURES) {

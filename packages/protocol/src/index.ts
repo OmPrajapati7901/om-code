@@ -23,6 +23,8 @@ export {
   ENTRY_SCHEMAS,
   type Entry,
   type EntryKind,
+  type ErrorEntry,
+  errorEntryV1,
   type FileSnapshot,
   fileSnapshotSchema,
   imageBlockSchema,

@@ -19,8 +19,8 @@ A terminal coding agent harness for macOS, built to understand agent-system desi
 ## Status
 
 M1 foundations are implemented: configuration, protocol schemas, durable journal/materialization,
-and the OpenAI-compatible streaming provider. The fake provider/recorder, prompt assembly,
-turn loop and conversational CLI remain LRN-08–11.
+the OpenAI-compatible streaming provider, the fake provider/recorder, prompt assembly, and the
+turn loop. The conversational CLI remains LRN-11.
 
 Run `pnpm install --frozen-lockfile` and `pnpm run check`. See the
 [LRN-06/07 evidence and contracts](docs/lrn-06-07-implementation-evidence.md) for recovery,

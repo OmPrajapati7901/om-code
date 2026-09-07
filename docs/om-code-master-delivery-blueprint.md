@@ -320,7 +320,9 @@ type Entry =
   | { kind: "compaction"; covers: { from: number; to: number }; summary: StructuredSummary }
   | { kind: "repair"; reason: string; truncated_from: number }
   | { kind: "turn_end"; usage: Usage; cost_usd?: number }
-  | { kind: "prompt"; instructions: FileSnapshot[] };
+  | { kind: "prompt"; instructions: FileSnapshot[] }
+  | { kind: "error"; source: "provider" | "local"; reason: string; message: string;
+      status?: number; retryable: boolean };
 ```
 
 `ToolStatus` includes **`unknown`** — the state a call enters when the process died between its effect
@@ -357,7 +359,8 @@ journal from LRN-06 onward. Owning tasks extend and bump the affected kind.
 | `ModelRef` | `{ id: string; base_url: string }`, matching LRN-04's resolved settings |
 | `by: tool:` | `"user" \| "model" \| "system"` plus `tool:<name>` (no whitespace) |
 | `network` | Present as `never`: a record requesting network fails loudly naming D-01 |
-| `prompt` (LRN-09) | An eleventh kind, added after this section was written: `{ instructions: FileSnapshot[] }` — which instruction files entered the system prompt, by content hash (AC-9.5). §7's ten kinds had no home for it; a `session_start` v2 was rejected because a mid-session instruction-file re-read has nowhere to attach otherwise |
+| `prompt` (LRN-09) | The first added kind (eleventh overall): `{ instructions: FileSnapshot[] }` — which instruction files entered the system prompt, by content hash (AC-9.5). §7's original ten kinds had no home for it; a `session_start` v2 was rejected because a mid-session instruction-file re-read has nowhere to attach otherwise |
+| `error` (LRN-10) | A twelfth kind: `{ source: "provider" \| "local"; reason; message; status?; retryable }`. AC-10.4 requires a durable provider failure, while the prior eleven kinds cannot represent an HTTP 429/500 without fabricating an interrupted assistant outcome and losing status/message. `retryable` records the kernel's classification; retry execution remains provider-owned |
 
 Field naming: journal (wire) fields are snake_case to mirror the M4 Rust DTOs;
 TypeScript-internal state (LRN-04's config) stays camelCase (see `AGENTS.md`).

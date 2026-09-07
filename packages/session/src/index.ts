@@ -7,6 +7,7 @@ import type {
   AssistantMessage,
   Checkpoint,
   Compaction,
+  ErrorEntry,
   Permission,
   Prompt,
   ReadableRecord,
@@ -31,6 +32,7 @@ export type SessionView = {
   compactions: Compaction[];
   repairs: Repair[];
   prompts: Prompt[];
+  errors: ErrorEntry[];
   unknownEntries: UnknownEntry[];
   diagnostics: string[];
   resumable: boolean;
@@ -50,6 +52,7 @@ export function materialize(records: readonly ReadableRecord[]): SessionView {
     compactions: [],
     repairs: [],
     prompts: [],
+    errors: [],
     unknownEntries: [],
     diagnostics: [],
     resumable: false,
@@ -90,6 +93,9 @@ export function materialize(records: readonly ReadableRecord[]): SessionView {
         break;
       case "prompt":
         view.prompts.push(structuredClone(entry));
+        break;
+      case "error":
+        view.errors.push(structuredClone(entry));
         break;
       case "unknown_entry":
         view.unknownEntries.push(structuredClone(entry));

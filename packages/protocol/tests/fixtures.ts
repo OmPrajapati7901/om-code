@@ -114,4 +114,13 @@ export const VALID_ENTRIES: Record<EntryKind, unknown> = {
     schemaVersion: 1,
     instructions: [{ path: "AGENTS.md", sha256: "0".repeat(64) }],
   },
+  error: {
+    kind: "error",
+    schemaVersion: 1,
+    source: "provider",
+    reason: "http",
+    message: "HTTP 500",
+    status: 500,
+    retryable: true,
+  },
 };

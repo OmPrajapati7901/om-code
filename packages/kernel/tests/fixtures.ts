@@ -16,6 +16,7 @@ export function baseSession(conversation: SessionView["conversation"] = []): Ses
     compactions: [],
     repairs: [],
     prompts: [],
+    errors: [],
     unknownEntries: [],
     diagnostics: [],
     resumable: false,

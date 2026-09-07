@@ -17,7 +17,7 @@ After every change, assess whether it introduces durable context that other agen
 
 ## Build, Test, and Development Commands
 
-The pnpm workspace holds `cli`, `storage`, `protocol`, `session` (pure materialization), `providers` (Chat Completions), `kernel` (system prompt assembly; LRN-10 adds the turn loop), and a private root `tests/` workspace for shared contracts and integration. Do not claim a gate passed without running it.
+The pnpm workspace holds `cli`, `storage`, `protocol`, `session` (pure materialization), `providers` (Chat Completions), `kernel` (system prompt assembly and the turn loop), and a private root `tests/` workspace for shared contracts and integration. Do not claim a gate passed without running it.
 
 - `pnpm install --frozen-lockfile` — reproduce pinned TypeScript dependencies.
 - `pnpm run check` — the full local gate: lint, typecheck, build, test, in that order.
@@ -54,6 +54,8 @@ Follow SOLID principles and sound object-oriented design where they improve clar
 Keep provider-specific logic and SDK types out of `packages/kernel`. `packages/protocol` is the wire-schema authority; Rust DTOs are generated or schema-checked mirrors. `packages/sandbox` and `packages/stub-client` depend on protocol contracts, not each other; the CLI composes them.
 
 `packages/kernel` is the only module that builds a system prompt (`role: "system"` message) or assembles a `ModelRequest`; nothing else appends to it (LR-FR-037). Assembly is a pure function of a `SessionView`, resolved config, and a caller-supplied environment/instruction-file snapshot — no clock or filesystem read inside it, so the same input always produces the same request. Instruction-file content enters by reference to its content hash via the `prompt` journal entry kind (protocol's eleventh, added in LRN-09; §7 of the blueprint only fixed ten).
+
+The kernel owns the typed turn state machine and its narrow `JournalSink` port; storage writers satisfy that port structurally, so kernel never imports storage. The loop awaits the authorizing journal append before prompt assembly, inference, and terminal delivery. Protocol has twelve entry kinds: provider and local turn failures use `error` (the twelfth), never `stop_reason` or an invented `StreamFailureKind`; an available provider partial remains an interrupted `assistant_message` v2.
 
 Field naming: the journal is a wire format, so its fields are snake_case (`turn_id`, `call_id`, `risk_class`) to mirror the Rust DTOs in M4, where snake_case is idiomatic. TypeScript-internal state (LRN-04's config: `baseUrl`) stays camelCase.
 

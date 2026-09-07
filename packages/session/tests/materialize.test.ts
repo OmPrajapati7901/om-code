@@ -10,6 +10,55 @@ it("does not invent resumable metadata from an empty or repair-only journal", ()
   });
 });
 
+it("keeps a session resumable when a turn error is materialized (AC-10.4)", () => {
+  const meta = {
+    id: "session",
+    project_root: "/project",
+    cwd: "/project",
+    created_at: "2026-09-06T00:00:00Z",
+    updated_at: "2026-09-06T00:00:00Z",
+    status: "active" as const,
+    mode: "manual" as const,
+    model: { id: "model", base_url: "https://endpoint.test" },
+    tags: [],
+  };
+  const records: ReadableRecord[] = [
+    {
+      v: 1,
+      seq: 1,
+      id: "0193b4c8-0000-7000-8000-000000000001",
+      ts: "2026-09-06T01:00:00Z",
+      by: "system",
+      entry: { kind: "session_start", schemaVersion: 1, meta },
+      sha256: "0".repeat(64),
+    },
+    {
+      v: 1,
+      seq: 2,
+      id: "0193b4c8-0000-7000-8000-000000000002",
+      ts: "2026-09-06T01:01:00Z",
+      by: "system",
+      turn_id: "turn-1",
+      entry: {
+        kind: "error",
+        schemaVersion: 1,
+        source: "provider",
+        reason: "http",
+        message: "HTTP 500",
+        status: 500,
+        retryable: true,
+      },
+      sha256: "0".repeat(64),
+    },
+  ];
+
+  expect(materialize(records)).toMatchObject({
+    errors: [records[1]?.entry],
+    diagnostics: [],
+    resumable: true,
+  });
+});
+
 it("preserves metadata, state records and unknown entries without mutating its input", () => {
   const meta = {
     id: "session",

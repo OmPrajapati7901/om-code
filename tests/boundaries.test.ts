@@ -18,6 +18,7 @@ function files(path: string): string[] {
 type BoundarySpec = {
   readonly name: string;
   readonly allowedDependencies: readonly string[];
+  readonly bannedDependencies: readonly string[];
   readonly bansAllNodeImports: boolean;
   readonly bansClockReads: boolean;
 };
@@ -26,18 +27,26 @@ const BOUNDARIES: readonly BoundarySpec[] = [
   {
     name: "session",
     allowedDependencies: ["@om-code/protocol"],
+    bannedDependencies: [],
     bansAllNodeImports: true,
     bansClockReads: false,
   },
   {
     name: "providers",
     allowedDependencies: ["@om-code/protocol"],
+    bannedDependencies: [],
     bansAllNodeImports: false,
     bansClockReads: false,
   },
   {
     name: "kernel",
     allowedDependencies: ["@om-code/protocol", "@om-code/session"],
+    bannedDependencies: [
+      "@om-code/providers",
+      "@om-code/storage",
+      "@om-code/sandbox",
+      "@om-code/stub-client",
+    ],
     bansAllNodeImports: true,
     // AC-9.4: prompt assembly is a pure function of its input — the date is
     // passed in, never read live — so a clock call here is a regression.
@@ -47,10 +56,15 @@ const BOUNDARIES: readonly BoundarySpec[] = [
 
 it.each(BOUNDARIES)(
   "$name keeps approved dependencies and performs no direct file/process I/O",
-  ({ name, allowedDependencies, bansAllNodeImports, bansClockReads }) => {
+  ({ name, allowedDependencies, bannedDependencies, bansAllNodeImports, bansClockReads }) => {
     const path = resolve(root, "packages", name);
     const manifest = JSON.parse(readFileSync(join(path, "package.json"), "utf8"));
     expect(Object.keys(manifest.dependencies).sort()).toEqual([...allowedDependencies].sort());
+    const declared = {
+      ...(manifest.dependencies ?? {}),
+      ...(manifest.devDependencies ?? {}),
+    };
+    expect(bannedDependencies.filter((dependency) => dependency in declared)).toEqual([]);
     for (const file of files(join(path, "src"))) {
       const source = readFileSync(file, "utf8");
       expect(source).not.toMatch(
@@ -61,6 +75,29 @@ it.each(BOUNDARIES)(
     }
   },
 );
+
+function declaredBannedDependencies(
+  manifest: Record<string, Record<string, string> | undefined>,
+  banned: readonly string[],
+): string[] {
+  const declared = { ...(manifest.dependencies ?? {}), ...(manifest.devDependencies ?? {}) };
+  return banned.filter((dependency) => dependency in declared);
+}
+
+it("AC-10.5 dependency grep detects a planted kernel boundary violation", () => {
+  expect(
+    declaredBannedDependencies(
+      { dependencies: {}, devDependencies: { "@om-code/storage": "workspace:*" } },
+      ["@om-code/providers", "@om-code/storage"],
+    ),
+  ).toEqual(["@om-code/storage"]);
+  expect(
+    declaredBannedDependencies(
+      { dependencies: { "@om-code/protocol": "workspace:*" }, devDependencies: {} },
+      ["@om-code/providers", "@om-code/storage"],
+    ),
+  ).toEqual([]);
+});
 
 // A grep signal, not a proof against aliases/data-driven dispatch. LRN-14 owns
 // dependency-cruiser; self-review still checks for a smuggled system message.

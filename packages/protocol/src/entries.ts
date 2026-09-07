@@ -1,6 +1,6 @@
 /**
- * The eleven journal entry kinds (LRN-05, blueprint §7; `prompt` added in
- * LRN-09) plus the version registry (AC-5.4).
+ * The twelve journal entry kinds (LRN-05, blueprint §7; `prompt` added in
+ * LRN-09 and `error` in LRN-10) plus the version registry (AC-5.4).
  *
  * The four M1 kinds (session_start, user_message, assistant_message,
  * turn_end) are tight. The six M2/M3 kinds carry exactly the fields blueprint
@@ -181,6 +181,19 @@ export const promptV1 = z
   })
   .strict();
 
+/** A durable provider or local turn failure (LRN-10/AC-10.4). */
+export const errorEntryV1 = z
+  .object({
+    kind: z.literal("error"),
+    schemaVersion: z.literal(1),
+    source: z.enum(["provider", "local"]),
+    reason: z.string().min(1),
+    message: z.string(),
+    status: z.number().int().optional(),
+    retryable: z.boolean(),
+  })
+  .strict();
+
 export const compactionV1 = z
   .object({
     kind: z.literal("compaction"),
@@ -226,6 +239,7 @@ export type Compaction = z.infer<typeof compactionV1>;
 export type Repair = z.infer<typeof repairV1>;
 export type TurnEnd = z.infer<typeof turnEndV1>;
 export type Prompt = z.infer<typeof promptV1>;
+export type ErrorEntry = z.infer<typeof errorEntryV1>;
 
 function v1(schema: z.ZodType): ReadonlyMap<number, z.ZodType> {
   return new Map([[1, schema]]);
@@ -246,6 +260,7 @@ export const ENTRY_SCHEMAS = {
   repair: v1(repairV1),
   turn_end: v1(turnEndV1),
   prompt: v1(promptV1),
+  error: v1(errorEntryV1),
 } satisfies Record<string, ReadonlyMap<number, z.ZodType>>;
 
 export type EntryKind = keyof typeof ENTRY_SCHEMAS;
@@ -263,4 +278,5 @@ export type Entry =
   | Compaction
   | Repair
   | TurnEnd
-  | Prompt;
+  | Prompt
+  | ErrorEntry;

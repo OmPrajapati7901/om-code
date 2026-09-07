@@ -2,9 +2,9 @@
 import { appendFile, mkdir, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { assemblePrompt } from "@om-code/kernel";
+import { assemblePrompt, type JournalSink, runTurn } from "@om-code/kernel";
 import { type Entry, type ModelResponse, ProviderError } from "@om-code/protocol";
-import { OpenAICompatibleProvider } from "@om-code/providers";
+import { FakeProvider, OpenAICompatibleProvider } from "@om-code/providers";
 import { materialize } from "@om-code/session";
 import { JournalReader, JournalWriter, journalPaths } from "@om-code/storage";
 import fc from "fast-check";
@@ -159,10 +159,138 @@ it("AC-6.4 append/read/materialize agrees with an independent generated referenc
         compactions: actions.filter((entry) => entry.kind === "compaction"),
         repairs: actions.filter((entry) => entry.kind === "repair"),
         prompts: actions.filter((entry) => entry.kind === "prompt"),
+        errors: actions.filter((entry) => entry.kind === "error"),
       });
     }),
     { numRuns: 50 },
   );
+});
+
+function sessionStartEntry(sessionId: string, projectRoot: string): Entry {
+  return {
+    kind: "session_start",
+    schemaVersion: 1,
+    meta: {
+      id: sessionId,
+      project_root: projectRoot,
+      cwd: projectRoot,
+      created_at: "2026-09-06T00:00:00Z",
+      updated_at: "2026-09-06T00:00:00Z",
+      status: "idle",
+      mode: "manual",
+      model: { id: "fixture", base_url: "https://fixture.test" },
+      tags: [],
+    },
+  };
+}
+
+it("AC-10.3 reconstructs a completed turn exactly from the real journal", async () => {
+  const loc = await location();
+  const writer = await JournalWriter.open(loc);
+  const start = await writer.append(sessionStartEntry(loc.sessionId, loc.projectRoot), {
+    by: "system",
+  });
+  const sink: JournalSink = writer;
+  const liveEvents = [];
+  for await (const event of runTurn({
+    session: materialize([start]),
+    text: "hello",
+    provider: new FakeProvider({
+      turns: [
+        {
+          kind: "stream",
+          deltas: [{ thinking: "briefly" }, { text: "hello" }, { text: " world" }],
+          usage: { input_tokens: 5, output_tokens: 2 },
+        },
+      ],
+    }),
+    journal: sink,
+    newTurnId: () => "turn-1",
+    signal: new AbortController().signal,
+    model: "fixture",
+    environment: {
+      cwd: loc.projectRoot,
+      projectRoot: loc.projectRoot,
+      os: "darwin/arm64",
+      date: "2026-09-06",
+    },
+    instructions: [],
+    tools: [],
+  })) {
+    liveEvents.push(event);
+  }
+  const completed = liveEvents.find(
+    (event) => event.type === "turn_end" && event.state.phase === "completed",
+  );
+  if (completed?.type !== "turn_end" || completed.state.phase !== "completed")
+    throw new Error("missing completed turn event");
+  await writer.close();
+
+  const fromDisk = materialize((await new JournalReader(loc).readAll(loc.sessionId)).records);
+  const assistant = fromDisk.conversation.find((entry) => entry.kind === "assistant_message");
+  if (assistant?.schemaVersion !== 2) throw new Error("missing v2 assistant journal entry");
+  expect(assistant).toEqual({
+    kind: "assistant_message",
+    schemaVersion: 2,
+    ...completed.state.response,
+  });
+  expect(
+    liveEvents
+      .filter((event) => event.type === "text_delta")
+      .map((event) => event.text)
+      .join(""),
+  ).toBe(
+    assistant?.content
+      .filter((block) => block.type === "text")
+      .map((block) => block.text)
+      .join(""),
+  );
+  expect(fromDisk).toMatchObject({ resumable: true, meta: { status: "idle" } });
+});
+
+it("AC-10.4 keeps a provider-failed turn resumable after disk materialization", async () => {
+  const loc = await location();
+  const writer = await JournalWriter.open(loc);
+  const start = await writer.append(sessionStartEntry(loc.sessionId, loc.projectRoot), {
+    by: "system",
+  });
+  for await (const _event of runTurn({
+    session: materialize([start]),
+    text: "hello",
+    provider: new FakeProvider({
+      turns: [{ kind: "http-error", status: 500, message: "upstream unavailable" }],
+    }),
+    journal: writer,
+    newTurnId: () => "turn-failed",
+    signal: new AbortController().signal,
+    model: "fixture",
+    environment: {
+      cwd: loc.projectRoot,
+      projectRoot: loc.projectRoot,
+      os: "darwin/arm64",
+      date: "2026-09-06",
+    },
+    instructions: [],
+    tools: [],
+  })) {
+    // Drain the async generator so all terminal records commit.
+  }
+  await writer.close();
+
+  const fromDisk = materialize((await new JournalReader(loc).readAll(loc.sessionId)).records);
+  expect(fromDisk).toMatchObject({
+    resumable: true,
+    diagnostics: [],
+    meta: { status: "idle" },
+    errors: [
+      {
+        source: "provider",
+        reason: "http",
+        status: 500,
+        retryable: true,
+      },
+    ],
+  });
 });
 
 it("LRN-09/AC-9.5 journals the instruction hashes assemblePrompt produces, not a module variable", async () => {
@@ -180,6 +308,7 @@ it("LRN-09/AC-9.5 journals the instruction hashes assemblePrompt produces, not a
       compactions: [],
       repairs: [],
       prompts: [],
+      errors: [],
       unknownEntries: [],
       diagnostics: [],
       resumable: false,
