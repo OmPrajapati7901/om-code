@@ -1,11 +1,12 @@
 /**
  * AC-16.6, unit half: `runTool` orders plan → record → execute, and a
  * `plan()` rejection means `execute()` (and the record) never happen.
+ * LRN-21d: the `authorize` verdict gates execution after the record.
  */
 
 import type { ToolCall } from "@om-code/protocol";
 import { expect, it } from "vitest";
-import { runTool, type Tool, type ToolContext, type ToolIo } from "../src/index.js";
+import { runTool, type Tool, type ToolContext, type ToolEvent, type ToolIo } from "../src/index.js";
 import { fakeCapability, fakeDescriptor, fakeEnd } from "./fixtures.js";
 
 function unusedIo(): ToolIo {
@@ -94,4 +95,52 @@ it("never records or executes when plan() rejects", async () => {
     ),
   ).rejects.toThrow("cannot plan this input");
   expect(recorded).toBe(0);
+});
+
+it("LRN-21d consults authorize after the record and ends denied without executing", async () => {
+  const order: string[] = [];
+  const tool: Tool = {
+    descriptor: () => fakeDescriptor("read"),
+    plan: async () => fakeCapability(),
+    execute: () => {
+      order.push("execute");
+      return fakeEnd();
+    },
+  };
+  const seen: unknown[] = [];
+  const events: ToolEvent[] = [];
+  for await (const event of runTool(tool, { path: "a" }, unusedIo(), context(), {
+    callId: "c1",
+    record: async () => {
+      order.push("record");
+    },
+    authorize: async (capability) => {
+      order.push("authorize");
+      seen.push(capability);
+      return false;
+    },
+  })) {
+    events.push(event);
+  }
+  expect(order).toEqual(["record", "authorize"]);
+  expect(seen).toEqual([fakeCapability()]);
+  expect(events).toHaveLength(1);
+  expect(events[0]).toMatchObject({ type: "end", result: { status: "denied" } });
+});
+
+it("LRN-21d an allowing verdict executes normally", async () => {
+  const tool: Tool = {
+    descriptor: () => fakeDescriptor("read"),
+    plan: async () => fakeCapability(),
+    execute: (_input, _io, _ctx) => fakeEnd(),
+  };
+  const events: ToolEvent[] = [];
+  for await (const event of runTool(tool, { path: "a" }, unusedIo(), context(), {
+    callId: "c1",
+    record: async () => {},
+    authorize: async () => true,
+  })) {
+    events.push(event);
+  }
+  expect(events.at(-1)?.type).toBe("end");
 });

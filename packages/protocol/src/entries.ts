@@ -158,6 +158,24 @@ export const permissionV1 = z
   })
   .strict();
 
+/**
+ * permission v2 (LRN-21d): `decision` gains `ask` so every evaluation —
+ * including fail-safe defaults — is journalable (AC-21.7), and `decided_by`
+ * gains `system` for the paths no rule or user produced (thrown-error deny,
+ * default ask). v1 stays readable via the version registry.
+ */
+export const permissionV2 = z
+  .object({
+    kind: z.literal("permission"),
+    schemaVersion: z.literal(2),
+    call_id: z.string().min(1),
+    decision: z.enum(["allow", "deny", "ask"]),
+    scope: z.enum(["once", "session"]),
+    decided_by: z.enum(["user", "rule", "timeout", "system"]),
+    reason: z.string(),
+  })
+  .strict();
+
 export const checkpointV1 = z
   .object({
     kind: z.literal("checkpoint"),
@@ -233,7 +251,7 @@ export type AssistantMessage =
   | z.infer<typeof assistantMessageV2>;
 export type ToolCall = z.infer<typeof toolCallV1>;
 export type ToolResult = z.infer<typeof toolResultV1>;
-export type Permission = z.infer<typeof permissionV1>;
+export type Permission = z.infer<typeof permissionV1> | z.infer<typeof permissionV2>;
 export type Checkpoint = z.infer<typeof checkpointV1>;
 export type Compaction = z.infer<typeof compactionV1>;
 export type Repair = z.infer<typeof repairV1>;
@@ -254,7 +272,10 @@ export const ENTRY_SCHEMAS = {
   ]),
   tool_call: v1(toolCallV1),
   tool_result: v1(toolResultV1),
-  permission: v1(permissionV1),
+  permission: new Map<number, z.ZodType>([
+    [1, permissionV1],
+    [2, permissionV2],
+  ]),
   checkpoint: v1(checkpointV1),
   compaction: v1(compactionV1),
   repair: v1(repairV1),

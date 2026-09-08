@@ -6,9 +6,8 @@
  * The adapters rule is one generated rule per adapter (`<name>-does-not-cross`):
  * a single from/to regex pair cannot distinguish a cross-adapter edge from a
  * package importing its own files, so each rule forbids one adapter from
- * reaching every other adapter plus cli.
- * Rules for policy, tools, context and sandbox match no nodes yet; that is
- * intentional headroom, not dead config.
+ * reaching every other adapter plus cli. `policy` joined the adapter set in
+ * LRN-21d (it exists since LRN-21a); every listed adapter now has sources.
  *
  * Both `src` and `dist` would appear in the graph (workspace imports
  * resolve to `dist` under plain node resolution), so every package pattern
@@ -19,7 +18,7 @@
  * no `dist/`). `tests/` is cruised but unconstrained as a from-side: tests
  * legitimately import everything.
  */
-const ADAPTERS = ["providers", "storage", "stub-client", "sandbox", "tools", "context"];
+const ADAPTERS = ["providers", "storage", "stub-client", "sandbox", "tools", "context", "policy"];
 
 const adapterRules = ADAPTERS.map((adapter) => {
   const others = ADAPTERS.filter((name) => name !== adapter);

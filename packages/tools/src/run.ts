@@ -1,12 +1,15 @@
 /**
- * The AC-16.6 sequencer (LRN-16).
+ * The AC-16.6 sequencer (LRN-16), extended with the policy gate (LRN-21d).
  *
- * `runTool` awaits `plan()`, then awaits `record(...)`, and only then
- * touches `execute()` — the same append-before-effect ordering LRN-10's
- * turn loop already uses. A `plan()` rejection means `execute()` never runs.
+ * `runTool` awaits `plan()`, then awaits `record(...)`, then awaits the
+ * optional `authorize(...)` verdict — and only then touches `execute()`.
+ * The verdict is deliberately narrow (`allow` or not): reasons, tiers and
+ * rule ids stay with the caller that journals them, so this package keeps
+ * no policy surface beyond the seam (AC-16.2, AC-21.1). A denied call yields
+ * a terminal `denied` end event without `execute()` ever running.
  */
 
-import type { ToolCall } from "@om-code/protocol";
+import type { CapabilityRequest, ToolCall } from "@om-code/protocol";
 import type { ToolIo } from "./ports.js";
 import type { Tool, ToolContext, ToolEvent } from "./tool.js";
 
@@ -17,12 +20,19 @@ import type { Tool, ToolContext, ToolEvent } from "./tool.js";
  */
 export type ToolCallRecorder = (call: ToolCall) => Promise<void>;
 
+/** Policy verdict: `true` executes, `false` ends `denied` without executing. */
+export type AuthorizeHook = (capability: CapabilityRequest) => Promise<boolean>;
+
 export async function* runTool(
   tool: Tool,
   input: unknown,
   io: ToolIo,
   ctx: ToolContext,
-  deps: { readonly record: ToolCallRecorder; readonly callId: string },
+  deps: {
+    readonly record: ToolCallRecorder;
+    readonly callId: string;
+    readonly authorize?: AuthorizeHook;
+  },
 ): AsyncIterable<ToolEvent> {
   const capability = await tool.plan(input, ctx);
   await deps.record({
@@ -33,5 +43,12 @@ export async function* runTool(
     input,
     capability,
   });
+  if (deps.authorize !== undefined && !(await deps.authorize(capability))) {
+    yield {
+      type: "end",
+      result: { status: "denied", preview: "", bytes: 0, truncated: false },
+    };
+    return;
+  }
   yield* tool.execute(input, io, ctx);
 }

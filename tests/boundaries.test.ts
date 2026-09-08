@@ -37,6 +37,7 @@ const BOUNDARIES: readonly BoundarySpec[] = [
     allowedDependencies: [
       "@om-code/context",
       "@om-code/kernel",
+      "@om-code/policy",
       "@om-code/protocol",
       "@om-code/providers",
       "@om-code/session",

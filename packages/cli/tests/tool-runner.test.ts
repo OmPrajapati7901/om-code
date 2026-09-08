@@ -4,7 +4,8 @@
  */
 import type { Bounder } from "@om-code/context";
 import { createBounder } from "@om-code/context";
-import type { CompleteToolCall, ToolCall } from "@om-code/protocol";
+import type { TierRules } from "@om-code/policy";
+import type { CompleteToolCall, Permission, ToolCall } from "@om-code/protocol";
 import { createRegistry, type Tool, type ToolIo } from "@om-code/tools";
 import { describe, expect, it } from "vitest";
 import { createToolRunner } from "../src/tool-runner.js";
@@ -34,9 +35,10 @@ function passthroughBounder(): Bounder {
 
 function depsFor(
   registry: ReturnType<typeof createRegistry>,
-  overrides: Partial<{ bounder: Bounder; notrunc: boolean }> = {},
+  overrides: Partial<{ bounder: Bounder; notrunc: boolean; policyTiers: TierRules[] }> = {},
 ) {
   const recorded: ToolCall[] = [];
+  const permissions: Permission[] = [];
   const runner = createToolRunner({
     registry,
     io: unusedIo(),
@@ -45,8 +47,27 @@ function depsFor(
     budget: { maxBytes: 4096, maxMs: 5000 },
     bounder: overrides.bounder ?? passthroughBounder(),
     ...(overrides.notrunc === undefined ? {} : { notrunc: overrides.notrunc }),
+    policyTiers: overrides.policyTiers ?? [],
   });
-  return { runner, recorded };
+  return { runner, recorded, permissions };
+}
+
+function runWith(
+  runner: ReturnType<typeof createToolRunner>,
+  recorded: ToolCall[],
+  permissions: Permission[],
+  name = "read",
+  argsRaw = "{}",
+) {
+  return runner.run(callFor(name, argsRaw), {
+    record: async (entry) => {
+      recorded.push(entry);
+    },
+    signal: new AbortController().signal,
+    recordPermission: async (entry) => {
+      permissions.push(entry);
+    },
+  });
 }
 
 function fakeTool(overrides: Partial<Tool> & { name?: "read" | "grep" | "glob" }): Tool {
@@ -237,5 +258,72 @@ describe("createToolRunner (LRN-18 A5)", () => {
     );
     expect(marked.preview).toBe("x".repeat(1024));
     expect(marked.truncated).toBe(false);
+  });
+
+  it("AC-21.7 journals the permission before the effect and denies without executing", async () => {
+    let executed = false;
+    const gated = fakeTool({
+      execute: async function* () {
+        executed = true;
+        yield {
+          type: "end",
+          result: { status: "ok", preview: "must not run", bytes: 11, truncated: false },
+        };
+      },
+    });
+    const { runner, recorded, permissions } = depsFor(createRegistry([gated]), {
+      policyTiers: [
+        {
+          tier: "user",
+          rules: [{ id: "u-deny", outcome: "deny", reason: "locked down", match: {} }],
+        },
+      ],
+    });
+    const outcome = await runWith(runner, recorded, permissions);
+    expect(outcome.status).toBe("denied");
+    expect(outcome.preview).toContain("policy denied");
+    expect(outcome.preview).toContain("locked down");
+    expect(outcome.preview).toContain("LRN-22");
+    expect(executed).toBe(false);
+    expect(recorded).toHaveLength(1);
+    expect(permissions).toEqual([
+      {
+        kind: "permission",
+        schemaVersion: 2,
+        call_id: "c1",
+        decision: "deny",
+        scope: "once",
+        decided_by: "rule",
+        reason: "[user] locked down",
+      },
+    ]);
+  });
+
+  it("AC-21.7 an ask blocks with an approval pointer and system attribution", async () => {
+    const execTool = fakeTool({
+      plan: async () => ({ risk_class: "exec" as const }),
+    });
+    const { runner, recorded, permissions } = depsFor(createRegistry([execTool]));
+    const outcome = await runWith(runner, recorded, permissions);
+    expect(outcome.status).toBe("denied");
+    expect(outcome.preview).toContain("approval required");
+    expect(outcome.preview).toContain("LRN-22");
+    expect(permissions).toHaveLength(1);
+    expect(permissions[0]).toMatchObject({ decision: "ask", decided_by: "system" });
+  });
+
+  it("AC-21.7 a failing permission journal aborts the turn instead of converting", async () => {
+    const { runner, recorded } = depsFor(createRegistry([fakeTool({})]));
+    await expect(
+      runner.run(callFor("read", "{}"), {
+        record: async (entry) => {
+          recorded.push(entry);
+        },
+        signal: new AbortController().signal,
+        recordPermission: async () => {
+          throw new Error("journal gone");
+        },
+      }),
+    ).rejects.toThrow("journal gone");
   });
 });

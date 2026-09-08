@@ -31,6 +31,7 @@ export {
   type Permission,
   type Prompt,
   permissionV1,
+  permissionV2,
   promptV1,
   type Repair,
   repairV1,

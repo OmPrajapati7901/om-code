@@ -341,6 +341,69 @@ describe("om run", () => {
     });
   });
 
+  it("AC-21.7 a malformed policy file fails startup with exit 1", async () => {
+    const location = await project();
+    await mkdir(join(location.root, ".om-code"), { recursive: true });
+    await writeFile(join(location.root, ".om-code", "policy.json"), "{oops");
+    const cli = harness(location.root, location.omHome, new FakeProvider(textTurns("never")));
+    const result = await runCli(["run", "-p", "question"], cli.deps);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("policy");
+  });
+
+  it("AC-21.7 a denying tier journals permission before the denied tool_result", async () => {
+    const location = await project();
+    await mkdir(join(location.root, ".om-code"), { recursive: true });
+    await writeFile(
+      join(location.root, ".om-code", "policy.json"),
+      JSON.stringify([{ id: "nope", outcome: "deny", reason: "locked", match: {} }]),
+    );
+    const provider = new FakeProvider({
+      turns: [
+        {
+          kind: "stream",
+          deltas: [
+            { tool: { index: 0, call_id: "c1", name: "grep", arguments: '{"pattern":"x"}' } },
+          ],
+        },
+        { kind: "stream", deltas: [{ text: "blocked, understood" }] },
+      ],
+    });
+    const cli = harness(location.root, location.omHome, provider);
+    const result = await runCli(["run", "-p", "question"], cli.deps);
+
+    expect(result.exitCode).toBe(0);
+    const { sessionId, records, view } = await onlySession(location.root, location.omHome);
+    const seqOf = (kind: string) => records.find((record) => record.entry.kind === kind)?.seq ?? -1;
+    const callSeq = seqOf("tool_call");
+    const permissionSeq = seqOf("permission");
+    const resultSeq = seqOf("tool_result");
+    expect(callSeq).toBeGreaterThan(0);
+    expect(permissionSeq).toBeGreaterThan(callSeq);
+    expect(resultSeq).toBeGreaterThan(permissionSeq);
+    expect(view.toolResults[0]).toMatchObject({ status: "denied" });
+    expect(view.permissions).toEqual([
+      {
+        kind: "permission",
+        schemaVersion: 2,
+        call_id: "c1",
+        decision: "deny",
+        scope: "once",
+        decided_by: "rule",
+        reason: "[project] locked",
+      },
+    ]);
+    const inspect = harness(location.root, location.omHome, new FakeProvider({ turns: [] }), "", {
+      createProvider: () => {
+        throw new Error("show must not create a provider");
+      },
+    });
+    const shown = await runCli(["show", sessionId], inspect.deps);
+    expect(shown.exitCode).toBe(0);
+    expect(inspect.stdout.join("")).toContain("Policy c1 (deny/rule)");
+  });
+
   it("AC-11.8 emits only schema-valid journal records as NDJSON", async () => {
     const location = await project();
     const cli = harness(location.root, location.omHome, new FakeProvider(textTurns("one-shot")));

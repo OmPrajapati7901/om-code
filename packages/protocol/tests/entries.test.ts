@@ -232,4 +232,56 @@ describe("entry schemas", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  describe("permission v2 (LRN-21d)", () => {
+    function v2Schema() {
+      const schema = ENTRY_SCHEMAS.permission.get(2);
+      if (schema === undefined) throw new Error("no schemaVersion 2 registered for permission");
+      return schema;
+    }
+
+    it("accepts ask decisions and system attribution", () => {
+      expect(
+        v2Schema().safeParse({
+          kind: "permission",
+          schemaVersion: 2,
+          call_id: "call_1",
+          decision: "ask",
+          scope: "once",
+          decided_by: "system",
+          reason: "no policy rule matched this capability",
+        }).success,
+      ).toBe(true);
+    });
+
+    it("rejects an unknown decided_by with a specific error", () => {
+      const result = v2Schema().safeParse({
+        kind: "permission",
+        schemaVersion: 2,
+        call_id: "call_1",
+        decision: "deny",
+        scope: "once",
+        decided_by: "oracle",
+        reason: "x",
+      });
+      expect(result.success).toBe(false);
+      if (result.success) return;
+      expect(result.error.issues[0]?.code).toBe("invalid_value");
+      expect(result.error.issues[0]?.path.map(String).join(".")).toBe("decided_by");
+    });
+
+    it("v1 stays readable beside v2 (adjacent-version pattern)", () => {
+      expect(
+        ENTRY_SCHEMAS.permission.get(1)?.safeParse({
+          kind: "permission",
+          schemaVersion: 1,
+          call_id: "call_1",
+          decision: "deny",
+          scope: "session",
+          decided_by: "user",
+          reason: "no",
+        }).success,
+      ).toBe(true);
+    });
+  });
 });

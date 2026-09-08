@@ -339,6 +339,9 @@ export async function* runTurn(input: TurnInput): AsyncIterable<TurnEvent> {
               view = { ...view, pendingCallIds: [...pending] };
             },
             signal: input.signal,
+            recordPermission: async (entry) => {
+              await append(entry, { by: "system", turn_id: turnId });
+            },
           });
           await append(
             {

@@ -8,7 +8,7 @@
 export { isToolError, ToolError, type ToolErrorKind } from "./errors.js";
 export type { ToolIo } from "./ports.js";
 export { createRegistry, TOOL_ROSTER, type ToolName, type ToolRegistry } from "./registry.js";
-export type { ToolCallRecorder } from "./run.js";
+export type { AuthorizeHook, ToolCallRecorder } from "./run.js";
 export { runTool } from "./run.js";
 export {
   type Tool,

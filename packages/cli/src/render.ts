@@ -67,6 +67,11 @@ export function renderTranscript(sessionId: string, view: SessionView, omHome: s
       lines.push(`  full output: ${location}`);
     }
   }
+  for (const permission of view.permissions)
+    lines.push(
+      "",
+      `Policy ${permission.call_id} (${permission.decision}/${permission.decided_by}): ${permission.reason}`,
+    );
   for (const error of view.errors)
     lines.push("", `Error (${error.source}/${error.reason}): ${error.message}`);
   return `${lines.join("\n")}\n`;

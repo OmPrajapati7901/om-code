@@ -26,6 +26,9 @@ importers:
       '@om-code/kernel':
         specifier: workspace:*
         version: link:../kernel
+      '@om-code/policy':
+        specifier: workspace:*
+        version: link:../policy
       '@om-code/protocol':
         specifier: workspace:*
         version: link:../protocol

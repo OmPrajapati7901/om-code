@@ -5,6 +5,7 @@ import {
   DEFAULT_RESULT_BYTES,
   DEFAULT_TOOL_BUDGET,
 } from "@om-code/context";
+import type { TierRules } from "@om-code/policy";
 import type { SessionMode } from "@om-code/protocol";
 import { materialize, type SessionView } from "@om-code/session";
 import {
@@ -19,6 +20,7 @@ import { createRegistry, readOnlyTools, toModelTool } from "@om-code/tools";
 import { booleanFlag, type FlagDefinition, parseArgs, stringFlag } from "../args.js";
 import { discoverRepository, loadInstructionFiles } from "../discovery.js";
 import { buildEnvironment } from "../environment.js";
+import { loadTierRules } from "../policy-tiers.js";
 import { runRepl } from "../repl.js";
 import { bootstrapSession } from "../session-bootstrap.js";
 import { createToolRunner } from "../tool-runner.js";
@@ -124,6 +126,20 @@ export async function runCommand(argv: readonly string[], deps: CliDeps): Promis
     blobs: createBlobStore({ omHome: location.omHome }),
     maxResultBytes: DEFAULT_RESULT_BYTES,
   });
+  // Tier files load outside any turn, but after the writer exists — so a
+  // malformed policy.json still closes the session cleanly (no leaked lock).
+  let policyTiers: TierRules[];
+  try {
+    policyTiers = await loadTierRules({
+      omHome: location.omHome,
+      projectRoot: location.projectRoot,
+      // Startup load, outside any turn: never aborted, driver-bounded instead.
+      signal: new AbortController().signal,
+    });
+  } catch (error) {
+    await bootstrapped.writer.close();
+    throw error;
+  }
   const toolRunner = createToolRunner({
     registry,
     io: stub,
@@ -132,6 +148,7 @@ export async function runCommand(argv: readonly string[], deps: CliDeps): Promis
     budget: { ...DEFAULT_TOOL_BUDGET },
     bounder,
     ...(notrunc ? { notrunc: true as const } : {}),
+    policyTiers,
   });
   const modelTools = registry.descriptors().map(toModelTool);
   const maxWallClockMs = settings.maxWallClockMs ?? DEFAULT_MAX_WALL_CLOCK_MS;

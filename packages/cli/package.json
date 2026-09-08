@@ -23,6 +23,7 @@
   "dependencies": {
     "@om-code/context": "workspace:*",
     "@om-code/kernel": "workspace:*",
+    "@om-code/policy": "workspace:*",
     "@om-code/protocol": "workspace:*",
     "@om-code/providers": "workspace:*",
     "@om-code/session": "workspace:*",

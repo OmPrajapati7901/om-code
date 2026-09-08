@@ -3,6 +3,7 @@ import type {
   CompleteToolCall,
   Entry,
   JournalRecord,
+  Permission,
   ToolCall,
   ToolStatus,
   Usage,
@@ -26,11 +27,17 @@ export type ToolOutcome = {
  * Tool-execution boundary owned by the kernel; the CLI's tools+stub
  * composition satisfies it structurally. `record` is awaited before any
  * effect (AC-16.6); the kernel appends the matching `tool_result` itself.
+ * `recordPermission` (LRN-21d) journals the policy decision before the
+ * effect runs (AC-21.7); absent callers skip permission journaling.
  */
 export type ToolRunner = {
   run(
     call: CompleteToolCall,
-    deps: { readonly record: (call: ToolCall) => Promise<void>; readonly signal: AbortSignal },
+    deps: {
+      readonly record: (call: ToolCall) => Promise<void>;
+      readonly signal: AbortSignal;
+      readonly recordPermission?: (entry: Permission) => Promise<void>;
+    },
   ): Promise<ToolOutcome>;
 };
 
