@@ -17,7 +17,7 @@ After every change, assess whether it introduces durable context that other agen
 
 ## Build, Test, and Development Commands
 
-The pnpm workspace holds `cli`, `storage`, `protocol`, `session` (pure materialization), `providers` (Chat Completions), `kernel` (system prompt assembly and the turn loop), `stub-client` (the stub port plus the local-ts driver behind it), `tools` (the `Tool` interface, registry, seven-name roster, and `read`/`grep`/`glob` implementations), `context` (central bounding: result truncation with blob spill, run budgets, cost arithmetic), and a private root `tests/` workspace for shared contracts and integration. Do not claim a gate passed without running it.
+The pnpm workspace holds `cli`, `storage`, `protocol`, `session` (pure materialization), `providers` (Chat Completions), `kernel` (system prompt assembly and the turn loop), `stub-client` (the stub port plus the local-ts driver behind it), `tools` (the `Tool` interface, registry, seven-name roster, and `read`/`grep`/`glob` implementations), `context` (central bounding: result truncation with blob spill, run budgets, cost arithmetic), `policy` (decision core: capability requests to allow/ask/deny, protocol-only), and a private root `tests/` workspace for shared contracts and integration. Do not claim a gate passed without running it.
 
 - `pnpm install --frozen-lockfile` — reproduce pinned TypeScript dependencies.
 - `pnpm run check` — the full local gate: lint, typecheck, build, test, in that order.

@@ -1,26 +1,31 @@
 {
-  "name": "@om-code/tests",
+  "name": "@om-code/policy",
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "description": "Policy decision core: capability requests to allow, ask or deny",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage --coverage.reporter=text"
   },
-  "devDependencies": {
-    "@om-code/kernel": "workspace:*",
-    "@om-code/policy": "workspace:*",
+  "dependencies": {
     "@om-code/protocol": "workspace:*",
-    "@om-code/providers": "workspace:*",
-    "@om-code/session": "workspace:*",
-    "@om-code/storage": "workspace:*",
-    "@om-code/stub-client": "workspace:*",
-    "@om-code/tools": "workspace:*",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
     "@types/node": "24.13.3",
     "@vitest/coverage-v8": "3.2.7",
-    "fast-check": "4.9.0",
     "typescript": "5.9.3",
     "vitest": "3.2.7"
   }

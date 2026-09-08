@@ -105,6 +105,28 @@ importers:
         specifier: 3.2.7
         version: 3.2.7(@types/node@24.13.3)(supports-color@7.2.0)
 
+  packages/policy:
+    dependencies:
+      '@om-code/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      zod:
+        specifier: 4.5.4
+        version: 4.5.4
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      '@vitest/coverage-v8':
+        specifier: 3.2.7
+        version: 3.2.7(supports-color@7.2.0)(vitest@3.2.7(@types/node@24.13.3)(supports-color@7.2.0))
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 3.2.7
+        version: 3.2.7(@types/node@24.13.3)(supports-color@7.2.0)
+
   packages/protocol:
     dependencies:
       zod:
@@ -239,6 +261,9 @@ importers:
       '@om-code/kernel':
         specifier: workspace:*
         version: link:../packages/kernel
+      '@om-code/policy':
+        specifier: workspace:*
+        version: link:../packages/policy
       '@om-code/protocol':
         specifier: workspace:*
         version: link:../packages/protocol

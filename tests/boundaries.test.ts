@@ -88,6 +88,7 @@ const BOUNDARIES: readonly BoundarySpec[] = [
       "@om-code/sandbox",
       "@om-code/providers",
       "@om-code/context",
+      "@om-code/policy",
     ],
     bansClockReads: false,
   },
@@ -102,6 +103,22 @@ const BOUNDARIES: readonly BoundarySpec[] = [
       "@om-code/stub-client",
       "@om-code/sandbox",
       "@om-code/tools",
+      "@om-code/policy",
+    ],
+    bansClockReads: false,
+  },
+  {
+    name: "policy",
+    allowedDependencies: ["@om-code/protocol", "zod"],
+    bannedDependencies: [
+      "@om-code/kernel",
+      "@om-code/cli",
+      "@om-code/providers",
+      "@om-code/storage",
+      "@om-code/stub-client",
+      "@om-code/sandbox",
+      "@om-code/tools",
+      "@om-code/context",
     ],
     bansClockReads: false,
   },
@@ -217,4 +234,19 @@ it("AC-19.1 truncation grep detects planted truncation and scans packages/tools/
       expect(truncatesPreview(line)).toBe(false);
     }
   }
+});
+
+// AC-21.1: policy authorizes effects, never tool names. A grep signal
+// following the same idiom: a named predicate, planted controls, then the
+// scan over packages/policy/src.
+function branchesOnTool(source: string): boolean {
+  return /\btool[Nn]ame\b|\btool\s*:\s*string\b/.test(source);
+}
+it("AC-21.1 tool-name grep detects planted branches and scans packages/policy/src", () => {
+  expect(branchesOnTool("function decide(toolName: string) {}")).toBe(true);
+  expect(branchesOnTool("const tool: string = call.name;")).toBe(true);
+  expect(branchesOnTool("const capability = request;")).toBe(false);
+  expect(branchesOnTool("import type { ToolStatus } from thermos;")).toBe(false);
+  for (const file of files(join(root, "packages/policy/src")))
+    expect(branchesOnTool(readFileSync(file, "utf8"))).toBe(false);
 });
