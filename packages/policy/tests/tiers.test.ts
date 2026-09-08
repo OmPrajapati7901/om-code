@@ -62,18 +62,14 @@ describe("resolveTiers", () => {
   });
 
   it("AC-21.2b empty tiers default to ask with a null tier", () => {
-    expect(resolveTiers(readCapability(), [])).toEqual({
-      outcome: "ask",
-      reason: "no policy rule matched this capability",
-      ruleId: null,
-      tier: null,
-    });
-    expect(resolveTiers(readCapability(), tiers({ user: [], project: [], session: [] }))).toEqual({
-      outcome: "ask",
-      reason: "no policy rule matched this capability",
-      ruleId: null,
-      tier: "user",
-    });
+    for (const input of [[], tiers({ user: [], project: [], session: [] })] as const) {
+      expect(resolveTiers(readCapability(), input)).toEqual({
+        outcome: "ask",
+        reason: "no policy rule matched this capability",
+        ruleId: null,
+        tier: null,
+      });
+    }
   });
 
   it("AC-21.3 a lower tier cannot loosen a higher tier's deny", () => {

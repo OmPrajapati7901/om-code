@@ -44,19 +44,29 @@ export function resolveTiers(
   request: CapabilityRequest,
   tiers: readonly TierRules[],
 ): TieredDecision {
-  const byTier = new Map<PolicyTier, PolicyDecision>();
+  const seen: Partial<Record<PolicyTier, PolicyRule[]>> = {};
   for (const { tier, rules } of tiers) {
-    if (!byTier.has(tier)) byTier.set(tier, evaluate(request, rules));
+    // Same-tier entries accumulate rather than overwrite: silently dropping
+    // a duplicate list could drop a deny, and this module never drops rules.
+    seen[tier] = [...(seen[tier] ?? []), ...rules];
   }
-  let winner: { tier: PolicyTier; decision: PolicyDecision } | undefined;
+  // Tiers with no matching rule abstain (21a's default ask stays inside
+  // `evaluate` for standalone use): otherwise every silent tier would
+  // outrank a genuine allow elsewhere and session grants could never work.
+  const contenders: { tier: PolicyTier; decision: PolicyDecision }[] = [];
   for (const tier of POLICY_TIERS) {
-    const decision = byTier.get(tier);
-    if (decision === undefined) continue;
+    const rules = seen[tier];
+    if (rules === undefined) continue;
+    const decision = evaluate(request, rules);
+    if (decision.ruleId !== null) contenders.push({ tier, decision });
+  }
+  let winner: (typeof contenders)[number] | undefined;
+  for (const contender of contenders) {
     if (
       winner === undefined ||
-      PRECEDENCE[decision.outcome] < PRECEDENCE[winner.decision.outcome]
+      PRECEDENCE[contender.decision.outcome] < PRECEDENCE[winner.decision.outcome]
     ) {
-      winner = { tier, decision };
+      winner = contender;
     }
   }
   if (winner === undefined) {
